@@ -20,7 +20,11 @@ export const routes: Routes = [
     title: 'Models — ille',
   },
   {
-    path: 'models/:category',
+    path: 'models/:branch/:category',
+    loadComponent: () => import('./pages/models/models.component').then((m) => m.ModelsComponent),
+  },
+  {
+    path: 'models/:branch',
     loadComponent: () => import('./pages/models/models.component').then((m) => m.ModelsComponent),
   },
   {

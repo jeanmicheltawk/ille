@@ -69,13 +69,23 @@ app.post('/api/auth/login', (req, res) => {
 // PUBLIC MODELS
 // ============================================================
 app.get('/api/models', (req, res) => {
-  const { category } = req.query;
-  let rows;
-  if (category) {
-    rows = db.prepare('SELECT * FROM models WHERE published = 1 AND category = ? ORDER BY name').all(category);
-  } else {
-    rows = db.prepare('SELECT * FROM models WHERE published = 1 ORDER BY name').all();
+  const { category, branch } = req.query;
+  let sql = 'SELECT * FROM models WHERE published = 1';
+  const params = [];
+  if (branch === 'men' || branch === 'women') {
+    sql += ' AND branch = ?';
+    params.push(branch);
   }
+  if (category !== undefined) {
+    if (category === '') {
+      sql += " AND (category = '' OR category IS NULL)";
+    } else {
+      sql += ' AND category = ?';
+      params.push(category);
+    }
+  }
+  sql += ' ORDER BY name';
+  const rows = db.prepare(sql).all(...params);
   res.json(rows.map(modelFromRow));
 });
 
@@ -120,10 +130,10 @@ app.get('/api/admin/models', requireAuth, (req, res) => {
 app.post('/api/admin/models', requireAuth, (req, res) => {
   const m = req.body;
   db.prepare(`
-    INSERT INTO models (id, name, category, height, bust, waist, hips, shoeSize,
+    INSERT INTO models (id, name, branch, category, height, bust, waist, hips, shoeSize,
       hair, eyes, city, outOfTown, instagram, coverImage, gallery, digitals,
       pdfUrl, introVideoUrl, catwalkVideoUrl, published)
-    VALUES (@id, @name, @category, @height, @bust, @waist, @hips, @shoeSize,
+    VALUES (@id, @name, @branch, @category, @height, @bust, @waist, @hips, @shoeSize,
       @hair, @eyes, @city, @outOfTown, @instagram, @coverImage, @gallery, @digitals,
       @pdfUrl, @introVideoUrl, @catwalkVideoUrl, @published)
   `).run(serializeModel(m));
@@ -133,7 +143,7 @@ app.post('/api/admin/models', requireAuth, (req, res) => {
 app.put('/api/admin/models/:id', requireAuth, (req, res) => {
   const m = { ...req.body, id: req.params.id };
   db.prepare(`
-    UPDATE models SET name=@name, category=@category, height=@height, bust=@bust,
+    UPDATE models SET name=@name, branch=@branch, category=@category, height=@height, bust=@bust,
       waist=@waist, hips=@hips, shoeSize=@shoeSize, hair=@hair, eyes=@eyes,
       city=@city, outOfTown=@outOfTown, instagram=@instagram,
       coverImage=@coverImage, gallery=@gallery, digitals=@digitals,
@@ -200,7 +210,8 @@ function serializeModel(m) {
   return {
     id: m.id,
     name: m.name,
-    category: m.category,
+    branch: m.branch === 'men' ? 'men' : 'women',
+    category: m.category || '',
     height: m.height ?? null,
     bust: m.bust ?? null,
     waist: m.waist ?? null,

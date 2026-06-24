@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { CategoriesService } from '../../core/categories.service';
 import { ModelCategory } from '../../core/models.types';
-import { setModelsBranch } from '../../core/models-branch.util';
+import { categoryNavLink, setModelsBranch } from '../../core/models-branch.util';
 
 @Component({
   selector: 'app-home',
@@ -41,7 +41,7 @@ import { setModelsBranch } from '../../core/models-branch.util';
 
     <section id="discover" class="cats container">
       <a *ngFor="let c of categories; let i = index"
-         [routerLink]="['/models', c.id]"
+         [routerLink]="categoryNavLink(c)"
          class="cat rise"
          [style.animation-delay]="(i * 0.08) + 's'"
          (click)="onCategoryClick(c.id)">
@@ -252,6 +252,7 @@ import { setModelsBranch } from '../../core/models-branch.util';
 })
 export class HomeComponent implements OnInit {
   categories: ModelCategory[] = [];
+  readonly categoryNavLink = categoryNavLink;
 
   constructor(private categoriesSvc: CategoriesService) {}
 

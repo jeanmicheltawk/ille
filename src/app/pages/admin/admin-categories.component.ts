@@ -13,8 +13,8 @@ import { ModelCategory } from '../../core/models.types';
       <div class="intro">
         <h2>Model categories</h2>
         <p>
-          Manage the categories shown on the <strong>/models</strong> page and home page.
-          Each model is assigned to one category.
+          Manage divisions (Women, Men) and sub-categories (New Faces, etc.) shown on the
+          <strong>/models</strong> page. Each model belongs to one division and optionally one sub-category.
         </p>
       </div>
 
@@ -52,7 +52,7 @@ import { ModelCategory } from '../../core/models.types';
             </div>
 
             <div class="field" [class.field--invalid]="fieldErrors['slug']">
-              <label>URL slug <span class="tip">Used in links: /models/{{ editing.id || 'slug' }}</span></label>
+              <label>URL slug <span class="tip">Used in links: /models/men/{{ editing.id || 'slug' }} or /models/women/{{ editing.id || 'slug' }}</span></label>
               <input name="slug" [(ngModel)]="editing.id" required placeholder="e.g. women"
                      [readonly]="!isNew && !!editing.id" (ngModelChange)="slugTouched = true" />
               <p class="field-error" *ngIf="fieldErrors['slug']">{{ fieldErrors['slug'] }}</p>

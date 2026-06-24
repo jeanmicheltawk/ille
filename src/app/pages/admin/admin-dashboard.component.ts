@@ -8,6 +8,7 @@ import { AuthService } from '../../core/auth.service';
 import { ApiService } from '../../core/api.service';
 import { Booking, Model, ModelApplication, ModelCategory } from '../../core/models.types';
 import { digitalsNameSlug } from '../../core/model.util';
+import { isBranchCategory, subCategories } from '../../core/models-branch.util';
 import {
   applicationToRecord,
   bookingToRecord,
@@ -37,11 +38,11 @@ import { CategoriesService } from '../../core/categories.service';
       </div>
 
       <nav class="dash__tabs">
-        <button [class.on]="tab==='models'" (click)="tab='models'">Models ({{ models.length }})</button>
-        <button [class.on]="tab==='categories'" (click)="tab='categories'">Categories ({{ categories.length }})</button>
-        <button [class.on]="tab==='apps'" (click)="tab='apps'">Applications ({{ apps.length }})</button>
-        <button [class.on]="tab==='bookings'" (click)="tab='bookings'">Bookings ({{ bookings.length }})</button>
-        <button [class.on]="tab==='services'" (click)="tab='services'">Services</button>
+        <button [class.on]="tab==='models'" (click)="setTab('models')">Models ({{ models.length }})</button>
+        <button [class.on]="tab==='categories'" (click)="setTab('categories')">Categories ({{ categories.length }})</button>
+        <button [class.on]="tab==='apps'" (click)="setTab('apps')">Applications ({{ apps.length }})</button>
+        <button [class.on]="tab==='bookings'" (click)="setTab('bookings')">Bookings ({{ bookings.length }})</button>
+        <button [class.on]="tab==='services'" (click)="setTab('services')">Services</button>
       </nav>
 
       <!-- MODELS -->
@@ -52,11 +53,12 @@ import { CategoriesService } from '../../core/categories.service';
         </div>
 
         <table class="tbl">
-          <thead><tr><th>Name</th><th>Category</th><th>City</th><th>Out of town</th><th>Published</th><th></th></tr></thead>
+          <thead><tr><th>Name</th><th>Division</th><th>Category</th><th>City</th><th>Out of town</th><th>Published</th><th></th></tr></thead>
           <tbody>
             <tr *ngFor="let m of models">
               <td>{{ m.name }}</td>
-              <td>{{ categoryName(m.category) }}</td>
+              <td>{{ branchName(m.branch) }}</td>
+              <td>{{ modelCategoryLabel(m) }}</td>
               <td>{{ m.city || '—' }}</td>
               <td>{{ m.outOfTown ? 'Yes' : '—' }}</td>
               <td>{{ m.published ? 'Yes' : 'Hidden' }}</td>
@@ -188,11 +190,19 @@ import { CategoriesService } from '../../core/categories.service';
               <input name="name" [(ngModel)]="editing.name" required />
               <p class="field-error" *ngIf="fieldErrors['name']">{{ fieldErrors['name'] }}</p>
             </div>
+            <div class="field" [class.field--invalid]="fieldErrors['branch']">
+              <label>Division</label>
+              <select name="branch" [(ngModel)]="editing.branch" required>
+                <option value="women">Women</option>
+                <option value="men">Men</option>
+              </select>
+              <p class="field-error" *ngIf="fieldErrors['branch']">{{ fieldErrors['branch'] }}</p>
+            </div>
             <div class="field" [class.field--invalid]="fieldErrors['category']">
               <label>Category</label>
-              <select name="category" [(ngModel)]="editing.category" required>
-                <option value="" disabled *ngIf="!categories.length">No categories — add one first</option>
-                <option *ngFor="let c of categories" [value]="c.id">{{ c.name }}</option>
+              <select name="category" [(ngModel)]="editing.category">
+                <option value="">Main roster</option>
+                <option *ngFor="let c of modelCategories" [value]="c.id">{{ c.name }}</option>
               </select>
               <p class="field-error" *ngIf="fieldErrors['category']">{{ fieldErrors['category'] }}</p>
             </div>
@@ -614,19 +624,42 @@ export class AdminDashboardComponent implements OnInit {
 
   async ngOnInit() {
     await this.refresh();
-    this.categories = await this.categoriesSvc.listAll();
+    await this.refreshCategories();
     this.apps = await this.subs.listApplications();
     this.bookings = await this.subs.listBookings();
+  }
+
+  async setTab(tab: typeof this.tab) {
+    this.tab = tab;
+    if (tab === 'models' || tab === 'categories') {
+      await this.refreshCategories();
+    }
+  }
+
+  private async refreshCategories() {
+    this.categories = await this.categoriesSvc.listAll();
   }
 
   categoryName(id: string): string {
     return this.categoriesSvc.nameFor(id, this.categories);
   }
 
+  get modelCategories(): ModelCategory[] {
+    return subCategories(this.categories);
+  }
+
+  branchName(branch: string): string {
+    return branch === 'men' ? 'Men' : 'Women';
+  }
+
+  modelCategoryLabel(m: Model): string {
+    if (!m.category || isBranchCategory(m.category)) return 'Main roster';
+    return this.categoryName(m.category);
+  }
+
   private blank(): Model {
-    const defaultCategory = this.categories[0]?.id ?? '';
     return {
-      id: '', name: '', category: defaultCategory, outOfTown: false,
+      id: '', name: '', branch: 'women', category: '', outOfTown: false,
       published: true, coverImage: '',
       gallery: [], digitals: [],
     };
@@ -636,18 +669,19 @@ export class AdminDashboardComponent implements OnInit {
     this.models = await this.modelsSvc.listAll();
   }
 
-  openAddModel() {
-    this.categoriesSvc.listAll().then((cats) => {
-      this.categories = cats;
-      this.clearFormErrors();
-      this.resetEditor();
-      this.modelModalOpen = true;
-    });
+  async openAddModel() {
+    await this.refreshCategories();
+    this.clearFormErrors();
+    this.resetEditor();
+    this.modelModalOpen = true;
   }
 
-  edit(m: Model) {
+  async edit(m: Model) {
+    await this.refreshCategories();
     this.clearFormErrors();
-    this.editing = { ...m, digitals: m.digitals || [], gallery: m.gallery || [] };
+    const branch = m.branch ?? (m.category === 'men' ? 'men' : 'women');
+    const category = !m.category || m.category === 'men' || m.category === 'women' ? '' : m.category;
+    this.editing = { ...m, branch, category, digitals: m.digitals || [], gallery: m.gallery || [] };
     this.modelModalOpen = true;
   }
 
@@ -678,11 +712,9 @@ export class AdminDashboardComponent implements OnInit {
       this.fieldErrors['name'] = 'Name is required.';
       missing.push('Name');
     }
-    if (!this.editing.category) {
-      this.fieldErrors['category'] = this.categories.length
-        ? 'Category is required.'
-        : 'Add a category first (Categories tab).';
-      missing.push('Category');
+    if (!this.editing.branch) {
+      this.fieldErrors['branch'] = 'Division is required.';
+      missing.push('Division');
     }
     if (!this.editing.coverImage) {
       this.fieldErrors['coverImage'] = 'Cover image is required.';
@@ -702,6 +734,9 @@ export class AdminDashboardComponent implements OnInit {
     if (!this.validateModel()) return;
     this.editing.gallery = this.editing.gallery || [];
     this.editing.digitals = this.editing.digitals || [];
+    if (!this.editing.category || isBranchCategory(this.editing.category)) {
+      this.editing.category = '';
+    }
     if (!this.editing.pdfUrl?.trim()) this.editing.pdfUrl = undefined;
     if (!this.editing.introVideoUrl?.trim()) this.editing.introVideoUrl = undefined;
     if (!this.editing.catwalkVideoUrl?.trim()) this.editing.catwalkVideoUrl = undefined;

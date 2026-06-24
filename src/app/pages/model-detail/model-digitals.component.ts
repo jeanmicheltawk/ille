@@ -150,5 +150,7 @@ export class ModelDigitalsComponent implements OnInit {
     });
   }
 
-  modelsBack = modelsBackLink;
+  modelsBack(): string[] {
+    return modelsBackLink(this.model?.branch ?? null);
+  }
 }

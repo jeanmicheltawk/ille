@@ -1,11 +1,17 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ModelsService } from '../../core/models.service';
 import { CategoriesService } from '../../core/categories.service';
 import { modelStats } from '../../core/model.util';
-import { Model, ModelCategory } from '../../core/models.types';
-import { resolveModelsBranch, setModelsBranch } from '../../core/models-branch.util';
+import { Model, ModelCategory, ModelsBranch } from '../../core/models.types';
+import {
+  isBranchCategory,
+  isBranchTab,
+  modelsCategoryLink,
+  modelsDivisionLink,
+  setModelsBranch,
+} from '../../core/models-branch.util';
 
 @Component({
   selector: 'app-models',
@@ -21,7 +27,7 @@ import { resolveModelsBranch, setModelsBranch } from '../../core/models-branch.u
       <div class="tabs">
         <ng-container *ngFor="let c of tabCategories; let first = first">
           <span class="tabs__sep" *ngIf="!first"></span>
-          <a [routerLink]="['/models', c.id]" [class.on]="category === c.id">{{ c.name }}</a>
+          <a [routerLink]="tabLink(c)" [class.on]="isTabActive(c)">{{ c.name }}</a>
         </ng-container>
       </div>
       <label class="oot">
@@ -109,7 +115,6 @@ import { resolveModelsBranch, setModelsBranch } from '../../core/models-branch.u
       display: grid;
       grid-template-columns: repeat(4, 1fr);
       gap: 3px;
-      // background: var(--line);
       margin-bottom: 80px;
     }
     .card {
@@ -212,13 +217,14 @@ export class ModelsComponent implements OnInit {
   all: Model[] = [];
   visible: Model[] = [];
   categories: ModelCategory[] = [];
-  category = '';
+  branch: ModelsBranch | null = null;
+  subCategory = '';
   onlyOutOfTown = false;
   loading = true;
-  branch: 'men' | 'women' | null = null;
 
   constructor(
     private route: ActivatedRoute,
+    private router: Router,
     private models: ModelsService,
     private categoriesSvc: CategoriesService,
   ) {}
@@ -226,12 +232,15 @@ export class ModelsComponent implements OnInit {
   async ngOnInit() {
     this.categories = await this.categoriesSvc.listPublished();
     this.route.paramMap.subscribe(async (params) => {
-      const cat = params.get('category') ?? '';
-      this.category = cat;
-      this.branch = resolveModelsBranch(cat);
-      if (cat === 'men' || cat === 'women') {
-        setModelsBranch(cat);
+      const branchParam = params.get('branch');
+      if (!isBranchTab(branchParam)) {
+        this.router.navigate(['/models'], { replaceUrl: true });
+        return;
       }
+
+      this.branch = branchParam;
+      this.subCategory = params.get('category') ?? '';
+      setModelsBranch(branchParam);
       await this.load();
     });
   }
@@ -246,13 +255,37 @@ export class ModelsComponent implements OnInit {
     return this.categories;
   }
 
+  tabLink(c: ModelCategory): string[] {
+    if (!this.branch) return ['/models'];
+    if (isBranchCategory(c.id)) {
+      return modelsDivisionLink(c.id as ModelsBranch);
+    }
+    return modelsCategoryLink(this.branch, c.id);
+  }
+
+  isTabActive(c: ModelCategory): boolean {
+    if (isBranchCategory(c.id)) {
+      return !this.subCategory && this.branch === c.id;
+    }
+    return this.subCategory === c.id;
+  }
+
   get heading(): string {
-    return this.categoriesSvc.nameFor(this.category, this.categories);
+    if (!this.subCategory) {
+      return this.branch === 'men' ? 'Men' : 'Women';
+    }
+    return this.categoriesSvc.nameFor(this.subCategory, this.categories);
   }
 
   async load() {
+    if (!this.branch) return;
+
     this.loading = true;
-    this.all = await this.models.list(this.category);
+    const filters = this.subCategory
+      ? { branch: this.branch, category: this.subCategory }
+      : { branch: this.branch };
+
+    this.all = await this.models.list(filters);
     this.applyFilter();
     this.loading = false;
   }

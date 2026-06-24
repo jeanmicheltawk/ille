@@ -178,5 +178,7 @@ export class ModelDetailComponent implements OnInit {
     return handle ? `https://instagram.com/${handle}` : '#';
   }
 
-  modelsBack = modelsBackLink;
+  modelsBack(): string[] {
+    return modelsBackLink(this.model?.branch ?? null);
+  }
 }

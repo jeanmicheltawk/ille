@@ -1,5 +1,5 @@
 import { UrlSegment } from '@angular/router';
-import { Model } from './models.types';
+import { Model, ModelsBranch } from './models.types';
 
 export interface ModelStat {
   label: string;
@@ -51,4 +51,31 @@ export function digitalsRouteMatcher(segments: UrlSegment[]) {
     return { consumed: segments, posParams: { digitalsPath: segments[0] } };
   }
   return null;
+}
+
+export function normalizeModelCategory(model: Pick<Model, 'category'>): string {
+  const category = model.category ?? '';
+  return category === 'men' || category === 'women' ? '' : category;
+}
+
+export function normalizeModelBranch(model: Pick<Model, 'branch' | 'category'>): ModelsBranch {
+  if (model.branch === 'men' || model.branch === 'women') return model.branch;
+  if (model.category === 'men') return 'men';
+  if (model.category === 'women') return 'women';
+  return 'women';
+}
+
+export function modelMatchesFilters(
+  model: Model,
+  filters?: { branch?: ModelsBranch; category?: string },
+): boolean {
+  if (!model.published) return false;
+  if (!filters) return true;
+
+  const branch = normalizeModelBranch(model);
+  const category = normalizeModelCategory(model);
+
+  if (filters.branch && branch !== filters.branch) return false;
+  if (filters.category !== undefined && category !== filters.category) return false;
+  return true;
 }

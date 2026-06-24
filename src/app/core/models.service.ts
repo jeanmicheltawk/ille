@@ -1,8 +1,13 @@
 import { Injectable } from '@angular/core';
 import { ApiService } from './api.service';
 import { UploadService } from './upload.service';
-import { digitalsNameSlug, parseDigitalsPath } from './model.util';
-import { Category, Model } from './models.types';
+import { digitalsNameSlug, modelMatchesFilters, parseDigitalsPath } from './model.util';
+import { Category, Model, ModelsBranch } from './models.types';
+
+export interface ModelListFilters {
+  branch?: ModelsBranch;
+  category?: Category;
+}
 
 /**
  * Model reads/writes. Uses the backend API when configured, otherwise an
@@ -13,20 +18,20 @@ export class ModelsService {
   constructor(private api: ApiService, private upload: UploadService) {}
 
   private mock: Model[] = [
-    this.m('amara-okafor', 'Amara Okafor', 'women', { height: 178, city: 'Beirut', outOfTown: false }),
-    this.m('lia-fontaine', 'Lia Fontaine', 'women', { height: 176, city: 'Paris', outOfTown: true }),
-    this.m('noor-haddad', 'Noor Haddad', 'women', { height: 174, city: 'Beirut', outOfTown: false }),
-    this.m('sofia-marchetti', 'Sofia Marchetti', 'women', { height: 180, city: 'Milan', outOfTown: true }),
-    this.m('karim-saliba', 'Karim Saliba', 'men', { height: 187, city: 'Beirut', outOfTown: false }),
-    this.m('luca-romano', 'Luca Romano', 'men', { height: 189, city: 'Rome', outOfTown: true }),
-    this.m('jad-khoury', 'Jad Khoury', 'men', { height: 185, city: 'Beirut', outOfTown: false }),
-    this.m('elif-demir', 'Elif Demir', 'new-faces', { height: 177, city: 'Istanbul', outOfTown: true }),
-    this.m('maya-rizk', 'Maya Rizk', 'new-faces', { height: 175, city: 'Beirut', outOfTown: false }),
+    this.m('amara-okafor', 'Amara Okafor', 'women', '', { height: 178, city: 'Beirut', outOfTown: false }),
+    this.m('lia-fontaine', 'Lia Fontaine', 'women', '', { height: 176, city: 'Paris', outOfTown: true }),
+    this.m('noor-haddad', 'Noor Haddad', 'women', '', { height: 174, city: 'Beirut', outOfTown: false }),
+    this.m('sofia-marchetti', 'Sofia Marchetti', 'women', '', { height: 180, city: 'Milan', outOfTown: true }),
+    this.m('karim-saliba', 'Karim Saliba', 'men', '', { height: 187, city: 'Beirut', outOfTown: false }),
+    this.m('luca-romano', 'Luca Romano', 'men', '', { height: 189, city: 'Rome', outOfTown: true }),
+    this.m('jad-khoury', 'Jad Khoury', 'men', '', { height: 185, city: 'Beirut', outOfTown: false }),
+    this.m('elif-demir', 'Elif Demir', 'women', 'new-faces', { height: 177, city: 'Istanbul', outOfTown: true }),
+    this.m('maya-rizk', 'Maya Rizk', 'men', 'new-faces', { height: 175, city: 'Beirut', outOfTown: false }),
   ];
 
-  private m(id: string, name: string, category: Category, extra: Partial<Model>): Model {
+  private m(id: string, name: string, branch: ModelsBranch, category: Category, extra: Partial<Model>): Model {
     return {
-      id, name, category,
+      id, name, branch, category,
       coverImage: `https://picsum.photos/seed/${id}/640/880`,
       gallery: [
         `https://picsum.photos/seed/${id}-g1/640/960`,
@@ -46,12 +51,19 @@ export class ModelsService {
     };
   }
 
-  async list(category?: Category): Promise<Model[]> {
+  async list(filters?: ModelListFilters): Promise<Model[]> {
     if (this.api.useApi) {
-      return this.api.get<Model[]>('/models' + (category ? `?category=${category}` : ''));
+      const params = new URLSearchParams();
+      if (filters?.branch) params.set('branch', filters.branch);
+      if (filters?.category !== undefined) params.set('category', filters.category);
+      const qs = params.toString();
+      const rows = await this.api.get<Model[]>('/models' + (qs ? `?${qs}` : ''));
+      return rows
+        .filter((m) => modelMatchesFilters(m, filters))
+        .sort((a, b) => a.name.localeCompare(b.name));
     }
     return this.mock
-      .filter((m) => m.published && (!category || m.category === category))
+      .filter((m) => modelMatchesFilters(m, filters))
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 

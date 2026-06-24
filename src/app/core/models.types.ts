@@ -1,7 +1,9 @@
 // Domain types shared across the app.
 
-/** URL slug stored on each model, e.g. "women", "new-faces". */
+/** URL slug for a sub-category tab, e.g. "new-faces". Empty = main roster. */
 export type Category = string;
+
+export type ModelsBranch = 'men' | 'women';
 
 export interface ModelCategory {
   id: string;
@@ -13,6 +15,7 @@ export interface ModelCategory {
 export interface Model {
   id: string;
   name: string;
+  branch: ModelsBranch;
   category: Category;
   // Agency measurements (cm). All optional so a profile can grow over time.
   height?: number;

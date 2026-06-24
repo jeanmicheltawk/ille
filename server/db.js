@@ -114,6 +114,13 @@ ensureColumn('models', 'digitals', `ALTER TABLE models ADD COLUMN digitals TEXT 
 ensureColumn('models', 'pdfUrl', 'ALTER TABLE models ADD COLUMN pdfUrl TEXT');
 ensureColumn('models', 'introVideoUrl', 'ALTER TABLE models ADD COLUMN introVideoUrl TEXT');
 ensureColumn('models', 'catwalkVideoUrl', 'ALTER TABLE models ADD COLUMN catwalkVideoUrl TEXT');
+ensureColumn('models', 'branch', `ALTER TABLE models ADD COLUMN branch TEXT NOT NULL DEFAULT 'women'`);
+
+// Legacy rows stored men/women in category — split into branch + sub-category.
+db.prepare(`UPDATE models SET branch = 'men', category = '' WHERE category = 'men'`).run();
+db.prepare(`UPDATE models SET branch = 'women', category = '' WHERE category = 'women'`).run();
+db.prepare(`UPDATE models SET branch = 'men' WHERE id = 'maya-rizk'`).run();
+db.prepare(`UPDATE models SET branch = 'women' WHERE id = 'elif-demir'`).run();
 
 // ---- seed the admin user -----------------------------------
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@ille.co';
@@ -149,28 +156,28 @@ if (categoryCount === 0) {
 const count = db.prepare('SELECT COUNT(*) AS c FROM models').get().c;
 if (count === 0) {
   const sample = [
-    ['amara-okafor', 'Amara Okafor', 'women', 178, 'Beirut', 0],
-    ['lia-fontaine', 'Lia Fontaine', 'women', 176, 'Paris', 1],
-    ['noor-haddad', 'Noor Haddad', 'women', 174, 'Beirut', 0],
-    ['sofia-marchetti', 'Sofia Marchetti', 'women', 180, 'Milan', 1],
-    ['karim-saliba', 'Karim Saliba', 'men', 187, 'Beirut', 0],
-    ['luca-romano', 'Luca Romano', 'men', 189, 'Rome', 1],
-    ['jad-khoury', 'Jad Khoury', 'men', 185, 'Beirut', 0],
-    ['elif-demir', 'Elif Demir', 'new-faces', 177, 'Istanbul', 1],
-    ['maya-rizk', 'Maya Rizk', 'new-faces', 175, 'Beirut', 0],
+    ['amara-okafor', 'Amara Okafor', 'women', '', 178, 'Beirut', 0],
+    ['lia-fontaine', 'Lia Fontaine', 'women', '', 176, 'Paris', 1],
+    ['noor-haddad', 'Noor Haddad', 'women', '', 174, 'Beirut', 0],
+    ['sofia-marchetti', 'Sofia Marchetti', 'women', '', 180, 'Milan', 1],
+    ['karim-saliba', 'Karim Saliba', 'men', '', 187, 'Beirut', 0],
+    ['luca-romano', 'Luca Romano', 'men', '', 189, 'Rome', 1],
+    ['jad-khoury', 'Jad Khoury', 'men', '', 185, 'Beirut', 0],
+    ['elif-demir', 'Elif Demir', 'women', 'new-faces', 177, 'Istanbul', 1],
+    ['maya-rizk', 'Maya Rizk', 'men', 'new-faces', 175, 'Beirut', 0],
   ];
   const insert = db.prepare(`
-    INSERT INTO models (id, name, category, height, bust, waist, hips, shoeSize,
+    INSERT INTO models (id, name, branch, category, height, bust, waist, hips, shoeSize,
       hair, eyes, city, outOfTown, instagram, coverImage, gallery, digitals,
       pdfUrl, introVideoUrl, catwalkVideoUrl, published)
-    VALUES (@id, @name, @category, @height, 84, 61, 89, 40,
+    VALUES (@id, @name, @branch, @category, @height, 84, 61, 89, 40,
       'Brown', 'Brown', @city, @outOfTown, '@'||@id, @coverImage, @gallery, @digitals,
       NULL, NULL, NULL, 1)
   `);
   const tx = db.transaction(() => {
-    for (const [id, name, category, height, city, oot] of sample) {
+    for (const [id, name, branch, category, height, city, oot] of sample) {
       insert.run({
-        id, name, category, height, city, outOfTown: oot,
+        id, name, branch, category, height, city, outOfTown: oot,
         coverImage: `https://picsum.photos/seed/${id}/640/880`,
         gallery: JSON.stringify([
           `https://picsum.photos/seed/${id}-g1/640/960`,
@@ -194,8 +201,23 @@ if (count === 0) {
 // ---- mappers ------------------------------------------------
 function modelFromRow(row) {
   if (!row) return null;
+  let branch = row.branch;
+  let category = row.category ?? '';
+  if (!branch) {
+    if (category === 'men') {
+      branch = 'men';
+      category = '';
+    } else if (category === 'women') {
+      branch = 'women';
+      category = '';
+    } else {
+      branch = 'women';
+    }
+  }
   return {
     ...row,
+    branch,
+    category,
     outOfTown: !!row.outOfTown,
     published: !!row.published,
     gallery: JSON.parse(row.gallery || '[]'),
