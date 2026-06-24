@@ -82,9 +82,10 @@ interface TypeOption {
                   <em>e.g. {{ t.example }}</em>
                 </button>
               </div>
-              <div class="field" style="margin-top:20px">
+              <div class="field" style="margin-top:20px" [class.field--invalid]="fieldErrors['title']">
                 <label>Main title <span class="tip">Required — the name clients see</span></label>
                 <input name="title" [(ngModel)]="editing.title" required placeholder="e.g. Model Camp" />
+                <p class="field-error" *ngIf="fieldErrors['title']">{{ fieldErrors['title'] }}</p>
               </div>
             </div>
 
@@ -138,8 +139,12 @@ interface TypeOption {
               <p class="step-help" *ngIf="!editing.formEnabled">
                 Turn on <strong>"Let clients book this service"</strong> in step 2 first.
               </p>
+              <p class="form-error" *ngIf="fieldErrors['formTitle']">{{ fieldErrors['formTitle'] }}</p>
+              <p class="form-error" *ngIf="fieldErrors['formFields']">{{ fieldErrors['formFields'] }}</p>
               <app-service-form-builder *ngIf="editing.formEnabled" [service]="editing" />
             </div>
+
+            <p class="form-error" *ngIf="error">{{ error }}</p>
 
             <div class="save-bar">
               <button class="btn" type="submit" *ngIf="editing.id || step === lastStep">
@@ -454,6 +459,8 @@ export class AdminServicesComponent implements OnInit {
   editing: ServiceItem = this.blank();
   viewing: ServiceSubmission | null = null;
   step = 1;
+  error = '';
+  fieldErrors: Record<string, string> = {};
 
   typeOptions: TypeOption[] = [
     { value: 'events_heading', title: 'Section heading', desc: 'A title that groups content, like "Upcoming Events".', example: 'Upcoming Events' },
@@ -505,11 +512,15 @@ export class AdminServicesComponent implements OnInit {
   startNew() {
     this.editing = this.blank();
     this.step = 1;
+    this.error = '';
+    this.fieldErrors = {};
   }
 
   edit(s: ServiceItem) {
     this.editing = { ...s, formFields: [...(s.formFields || [])] };
     this.step = 1;
+    this.error = '';
+    this.fieldErrors = {};
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -526,8 +537,49 @@ export class AdminServicesComponent implements OnInit {
     }
   }
 
+  private validate(): boolean {
+    this.fieldErrors = {};
+    this.error = '';
+    const missing: string[] = [];
+
+    if (!this.editing.title?.trim()) {
+      this.fieldErrors['title'] = 'Main title is required.';
+      missing.push('Main title');
+      this.step = 1;
+    }
+
+    if (this.editing.formEnabled) {
+      if (!this.editing.formTitle?.trim()) {
+        this.fieldErrors['formTitle'] = 'Booking page title is required.';
+        missing.push('Booking page title');
+        this.step = 3;
+      }
+
+      const fields = this.editing.formFields || [];
+      if (!fields.length) {
+        this.fieldErrors['formFields'] = 'Add at least one question to the booking form.';
+        missing.push('Form questions');
+        this.step = 3;
+      } else {
+        const unlabeled = fields.filter((f) => f.type !== 'info' && !f.label?.trim());
+        if (unlabeled.length) {
+          this.fieldErrors['formFields'] = 'Every question needs a label.';
+          missing.push('Question labels');
+          this.step = 3;
+        }
+      }
+    }
+
+    if (missing.length) {
+      this.error = `Please fill in the missing fields: ${missing.join(', ')}.`;
+      return false;
+    }
+
+    return true;
+  }
+
   async save() {
-    if (!this.editing.title?.trim()) return;
+    if (!this.validate()) return;
     const isNew = !this.editing.id;
     if (this.editing.id) {
       await this.services.update(this.editing);
@@ -537,7 +589,6 @@ export class AdminServicesComponent implements OnInit {
     }
     await this.reload();
     if (isNew) {
-      alert('done');
       this.startNew();
     } else {
       const saved = this.items.find((i) => i.id === this.editing.id);

@@ -165,6 +165,26 @@ img { display: block; max-width: 100%; }
   color: var(--ink);
 }
 .field .req { color: var(--error); }
+.field-error {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-weight: 200;
+  color: var(--error);
+}
+.field--invalid input,
+.field--invalid select,
+.field--invalid textarea {
+  border-color: var(--error);
+}
+.form-error {
+  margin: 0 0 20px;
+  padding: 14px 16px;
+  border: 1px solid rgba(196, 122, 122, 0.4);
+  color: var(--error);
+  font-size: 13px;
+  font-weight: 200;
+  line-height: 1.5;
+}
 
 .notice {
   padding: 18px 22px;

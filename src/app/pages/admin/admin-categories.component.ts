@@ -43,15 +43,19 @@ import { ModelCategory } from '../../core/models.types';
               <button type="button" class="btn btn--ghost btn--sm" *ngIf="editing.id" (click)="startNew()">Cancel</button>
             </div>
 
-            <div class="field">
+            <p class="form-error" *ngIf="error">{{ error }}</p>
+
+            <div class="field" [class.field--invalid]="fieldErrors['name']">
               <label>Name <span class="tip">Shown in navigation and filters</span></label>
               <input name="name" [(ngModel)]="editing.name" required placeholder="e.g. Women" (ngModelChange)="onNameChange()" />
+              <p class="field-error" *ngIf="fieldErrors['name']">{{ fieldErrors['name'] }}</p>
             </div>
 
-            <div class="field">
+            <div class="field" [class.field--invalid]="fieldErrors['slug']">
               <label>URL slug <span class="tip">Used in links: /models/{{ editing.id || 'slug' }}</span></label>
               <input name="slug" [(ngModel)]="editing.id" required placeholder="e.g. women"
                      [readonly]="!isNew && !!editing.id" (ngModelChange)="slugTouched = true" />
+              <p class="field-error" *ngIf="fieldErrors['slug']">{{ fieldErrors['slug'] }}</p>
             </div>
 
             <div class="field">
@@ -68,13 +72,11 @@ import { ModelCategory } from '../../core/models.types';
             </label>
 
             <div class="save-bar">
-              <button class="btn" type="submit" [disabled]="!editing.name || !editing.id">
+              <button class="btn" type="submit">
                 {{ isNew ? 'Create category' : 'Save changes' }}
               </button>
               <button class="btn btn--ghost" type="button" *ngIf="editing.id && !isNew" (click)="remove()">Delete</button>
             </div>
-
-            <p class="error" *ngIf="error">{{ error }}</p>
           </form>
         </div>
       </div>
@@ -226,6 +228,7 @@ export class AdminCategoriesComponent implements OnInit {
   editing: ModelCategory = this.blank();
   isNew = true;
   error = '';
+  fieldErrors: Record<string, string> = {};
   slugTouched = false;
 
   constructor(private categoriesSvc: CategoriesService) {}
@@ -248,6 +251,7 @@ export class AdminCategoriesComponent implements OnInit {
     this.editing = this.blank();
     this.isNew = true;
     this.error = '';
+    this.fieldErrors = {};
     this.slugTouched = false;
   }
 
@@ -255,6 +259,7 @@ export class AdminCategoriesComponent implements OnInit {
     this.editing = { ...c };
     this.isNew = false;
     this.error = '';
+    this.fieldErrors = {};
     this.slugTouched = true;
   }
 
@@ -264,10 +269,34 @@ export class AdminCategoriesComponent implements OnInit {
     }
   }
 
+  private validate(): boolean {
+    this.fieldErrors = {};
+    const missing: string[] = [];
+
+    if (!this.editing.name?.trim()) {
+      this.fieldErrors['name'] = 'Name is required.';
+      missing.push('Name');
+    }
+    if (!this.editing.id?.trim()) {
+      this.fieldErrors['slug'] = 'URL slug is required.';
+      missing.push('URL slug');
+    }
+
+    if (missing.length) {
+      this.error = `Please fill in the missing fields: ${missing.join(', ')}.`;
+      return false;
+    }
+
+    return true;
+  }
+
   async save() {
     this.error = '';
+    if (!this.validate()) return;
+
     const id = this.categoriesSvc.slugFromName(this.editing.id || this.editing.name);
     if (!id) {
+      this.fieldErrors['slug'] = 'Please enter a valid URL slug.';
       this.error = 'Please enter a valid name and slug.';
       return;
     }

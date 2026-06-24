@@ -183,13 +183,18 @@ import { CategoriesService } from '../../core/categories.service';
 
           <p class="section-label">Profile</p>
           <div class="grid3">
-            <div class="field"><label>Name</label><input name="name" [(ngModel)]="editing.name" required /></div>
-            <div class="field">
+            <div class="field" [class.field--invalid]="fieldErrors['name']">
+              <label>Name</label>
+              <input name="name" [(ngModel)]="editing.name" required />
+              <p class="field-error" *ngIf="fieldErrors['name']">{{ fieldErrors['name'] }}</p>
+            </div>
+            <div class="field" [class.field--invalid]="fieldErrors['category']">
               <label>Category</label>
               <select name="category" [(ngModel)]="editing.category" required>
                 <option value="" disabled *ngIf="!categories.length">No categories — add one first</option>
                 <option *ngFor="let c of categories" [value]="c.id">{{ c.name }}</option>
               </select>
+              <p class="field-error" *ngIf="fieldErrors['category']">{{ fieldErrors['category'] }}</p>
             </div>
             <div class="field"><label>City</label><input name="city" [(ngModel)]="editing.city" /></div>
             <div class="field"><label>Height</label><input type="number" name="height" [(ngModel)]="editing.height" /></div>
@@ -202,7 +207,7 @@ import { CategoriesService } from '../../core/categories.service';
             <div class="field"><label>Instagram</label><input name="ig" [(ngModel)]="editing.instagram" placeholder="@username" /></div>
           </div>
 
-          <div class="field cover-field">
+          <div class="field cover-field" [class.field--invalid]="fieldErrors['coverImage']">
             <label>Cover image (main profile photo)</label>
             <app-file-upload
               name="cover"
@@ -210,6 +215,7 @@ import { CategoriesService } from '../../core/categories.service';
               label="Upload cover photo"
               hint="Choose a photo from your computer or phone"
             />
+            <p class="field-error" *ngIf="fieldErrors['coverImage']">{{ fieldErrors['coverImage'] }}</p>
           </div>
 
           <div class="field">
@@ -269,6 +275,8 @@ import { CategoriesService } from '../../core/categories.service';
             <label><input type="checkbox" name="oot" [(ngModel)]="editing.outOfTown" /> Out of town</label>
             <label><input type="checkbox" name="pub" [(ngModel)]="editing.published" /> Published (visible on site)</label>
           </div>
+
+          <p class="form-error form-error--actions" *ngIf="formError">{{ formError }}</p>
 
           <div class="editor__actions">
             <button class="btn" type="submit">{{ editing.id ? 'Save changes' : 'Add model' }}</button>
@@ -407,6 +415,7 @@ import { CategoriesService } from '../../core/categories.service';
       color: var(--ink-soft);
     }
     .checks label { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+    .form-error--actions { margin: 0 0 16px; }
     .editor__actions { display: flex; gap: 14px; }
 
     .tbl { width: 100%; border-collapse: collapse; }
@@ -589,6 +598,8 @@ export class AdminDashboardComponent implements OnInit {
   configured = false;
   viewingForm: FormRecord | null = null;
   modelModalOpen = false;
+  formError = '';
+  fieldErrors: Record<string, string> = {};
 
   constructor(
     private modelsSvc: ModelsService,
@@ -628,18 +639,21 @@ export class AdminDashboardComponent implements OnInit {
   openAddModel() {
     this.categoriesSvc.listAll().then((cats) => {
       this.categories = cats;
+      this.clearFormErrors();
       this.resetEditor();
       this.modelModalOpen = true;
     });
   }
 
   edit(m: Model) {
+    this.clearFormErrors();
     this.editing = { ...m, digitals: m.digitals || [], gallery: m.gallery || [] };
     this.modelModalOpen = true;
   }
 
   closeModelModal() {
     this.modelModalOpen = false;
+    this.clearFormErrors();
     this.resetEditor();
   }
 
@@ -647,12 +661,45 @@ export class AdminDashboardComponent implements OnInit {
     this.editing = this.blank();
   }
 
+  private clearFormErrors() {
+    this.formError = '';
+    this.fieldErrors = {};
+  }
+
   get digitalsSlug(): string {
     return this.editing.name ? digitalsNameSlug(this.editing.name) : '';
   }
 
+  private validateModel(): boolean {
+    this.fieldErrors = {};
+    const missing: string[] = [];
+
+    if (!this.editing.name?.trim()) {
+      this.fieldErrors['name'] = 'Name is required.';
+      missing.push('Name');
+    }
+    if (!this.editing.category) {
+      this.fieldErrors['category'] = this.categories.length
+        ? 'Category is required.'
+        : 'Add a category first (Categories tab).';
+      missing.push('Category');
+    }
+    if (!this.editing.coverImage) {
+      this.fieldErrors['coverImage'] = 'Cover image is required.';
+      missing.push('Cover image');
+    }
+
+    if (missing.length) {
+      this.formError = `Please fill in the missing fields: ${missing.join(', ')}.`;
+      return false;
+    }
+
+    this.formError = '';
+    return true;
+  }
+
   async save() {
-    if (!this.editing.name || !this.editing.coverImage || !this.editing.category) return;
+    if (!this.validateModel()) return;
     this.editing.gallery = this.editing.gallery || [];
     this.editing.digitals = this.editing.digitals || [];
     if (!this.editing.pdfUrl?.trim()) this.editing.pdfUrl = undefined;

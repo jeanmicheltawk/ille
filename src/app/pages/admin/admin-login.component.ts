@@ -25,13 +25,15 @@ import { ApiService } from '../../core/api.service';
       <div *ngIf="error" class="notice notice--err">{{ error }}</div>
 
       <form (ngSubmit)="login()" #f="ngForm">
-        <div class="field">
+        <div class="field" [class.field--invalid]="fieldErrors['email']">
           <label>Email</label>
           <input type="email" name="email" [(ngModel)]="email" />
+          <p class="field-error" *ngIf="fieldErrors['email']">{{ fieldErrors['email'] }}</p>
         </div>
-        <div class="field">
+        <div class="field" [class.field--invalid]="fieldErrors['password']">
           <label>Password</label>
           <input type="password" name="password" [(ngModel)]="password" required />
+          <p class="field-error" *ngIf="fieldErrors['password']">{{ fieldErrors['password'] }}</p>
         </div>
         <button class="btn" type="submit" [disabled]="busy">{{ busy ? 'Signing in…' : 'Sign In' }}</button>
       </form>
@@ -56,6 +58,7 @@ export class AdminLoginComponent {
   password = '';
   busy = false;
   error = '';
+  fieldErrors: Record<string, string> = {};
   connected: boolean;
 
   constructor(private auth: AuthService, private router: Router, api: ApiService) {
@@ -64,6 +67,22 @@ export class AdminLoginComponent {
 
   async login() {
     this.error = '';
+    this.fieldErrors = {};
+    const missing: string[] = [];
+
+    if (!this.email?.trim()) {
+      this.fieldErrors['email'] = 'Email is required.';
+      missing.push('Email');
+    }
+    if (!this.password) {
+      this.fieldErrors['password'] = 'Password is required.';
+      missing.push('Password');
+    }
+    if (missing.length) {
+      this.error = `Please fill in the missing fields: ${missing.join(', ')}.`;
+      return;
+    }
+
     this.busy = true;
     const res = await this.auth.signIn(this.email, this.password);
     this.busy = false;
