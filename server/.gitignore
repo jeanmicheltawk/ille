@@ -1,0 +1,6 @@
+node_modules/
+ille.db
+ille.db-*
+uploads/*
+!uploads/.gitkeep
+.env
