@@ -23,6 +23,29 @@
           },
           "configurations": {
             "production": {
+              "fileReplacements": [
+                  {
+                    "replace": "src/environments/environment.ts",
+                    "with": "src/environments/environment.prod.ts"
+                  }
+                ],
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "500kb",
+                  "maximumError": "1.5mb"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "pages": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.pages.ts"
+                }
+              ],
+              "baseHref": "/ille/",
               "budgets": [
                 {
                   "type": "initial",
