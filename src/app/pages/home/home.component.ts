@@ -1,10 +1,14 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { CategoriesService } from '../../core/categories.service';
+import { ModelCategory } from '../../core/models.types';
+import { setModelsBranch } from '../../core/models-branch.util';
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [RouterLink],
+  imports: [CommonModule, RouterLink],
   template: `
     <section class="hero">
       <div class="hero__bg" [style.background-image]="'url(assets/home-bg.webp)'" aria-hidden="true"></div>
@@ -35,21 +39,13 @@ import { RouterLink } from '@angular/router';
       </a>
     </section>
 
-    <section id="discover" class="cats">
-      <a routerLink="/models/women" class="cat rise">
-        <div class="cat__img" style="background-image:url('https://picsum.photos/seed/women-cat/640/960')"></div>
-        <div class="cat__overlay"></div>
-        <span class="cat__label">Women</span>
-      </a>
-      <a routerLink="/models/new-faces" class="cat rise" style="animation-delay:.1s">
-        <div class="cat__img" style="background-image:url('https://picsum.photos/seed/newfaces-cat/640/960')"></div>
-        <div class="cat__overlay"></div>
-        <span class="cat__label">New Faces</span>
-      </a>
-      <a routerLink="/models/men" class="cat rise" style="animation-delay:.2s">
-        <div class="cat__img" style="background-image:url('https://picsum.photos/seed/men-cat/640/960')"></div>
-        <div class="cat__overlay"></div>
-        <span class="cat__label">Men</span>
+    <section id="discover" class="cats container">
+      <a *ngFor="let c of categories; let i = index"
+         [routerLink]="['/models', c.id]"
+         class="cat rise"
+         [style.animation-delay]="(i * 0.08) + 's'"
+         (click)="onCategoryClick(c.id)">
+        <span class="cat__label">{{ c.name }}</span>
       </a>
     </section>
 
@@ -192,51 +188,28 @@ import { RouterLink } from '@angular/router';
     }
 
     .cats {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 2px;
-      background: var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 12px 32px;
+      padding: 80px 28px 100px;
+      border-bottom: 1px solid var(--line);
     }
     .cat {
-      position: relative;
-      overflow: hidden;
       display: block;
-      background: var(--black);
-      min-height: 65vh;
-    }
-    .cat__img {
-      position: absolute; inset: 0;
-      background-size: cover;
-      background-position: center top;
-      filter: grayscale(0.4) brightness(0.7);
-      transform: scale(1);
-      transition: transform 1.2s var(--ease-slow), filter 1s var(--ease);
-    }
-    .cat:hover .cat__img {
-      transform: scale(1.04);
-      filter: grayscale(0.1) brightness(0.85);
-    }
-    .cat__overlay {
-      position: absolute; inset: 0;
-      background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 55%);
-      transition: background 0.6s ease;
-    }
-    .cat:hover .cat__overlay {
-      background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.15) 65%);
-    }
-    .cat__label {
-      position: absolute;
-      left: 32px; bottom: 36px;
-      font-family: var(--body);
-      font-size: clamp(20px, 2.5vw, 30px);
+      padding: 12px 0;
+      font-size: clamp(18px, 2.5vw, 26px);
       font-weight: 200;
-      letter-spacing: 0.18em;
+      letter-spacing: 0.22em;
       text-transform: uppercase;
-      color: #fff;
-      z-index: 2;
-      transition: letter-spacing 0.6s var(--ease);
+      color: var(--ink-muted);
+      transition: color 0.4s ease, letter-spacing 0.4s ease;
     }
-    .cat:hover .cat__label { letter-spacing: 0.28em; }
+    .cat:hover {
+      color: var(--accent);
+      letter-spacing: 0.3em;
+    }
+    .cat__label { display: block; }
 
     .statement {
       padding: 120px 0 60px;
@@ -265,8 +238,7 @@ import { RouterLink } from '@angular/router';
     }
 
     @media (max-width: 760px) {
-      .cats { grid-template-columns: 1fr; }
-      .cat { min-height: 50vh; }
+      .cats { gap: 8px 24px; padding: 60px 20px 80px; }
       .hero__nav-gap { width: 48px; }
       .hero__headline { white-space: normal; }
       .hero__nav { margin-bottom: 36px; }
@@ -278,4 +250,18 @@ import { RouterLink } from '@angular/router';
     }
   `],
 })
-export class HomeComponent {}
+export class HomeComponent implements OnInit {
+  categories: ModelCategory[] = [];
+
+  constructor(private categoriesSvc: CategoriesService) {}
+
+  async ngOnInit() {
+    this.categories = await this.categoriesSvc.listPublished();
+  }
+
+  onCategoryClick(id: string) {
+    if (id === 'men' || id === 'women') {
+      setModelsBranch(id);
+    }
+  }
+}

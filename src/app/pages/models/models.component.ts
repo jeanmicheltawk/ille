@@ -2,8 +2,10 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ModelsService } from '../../core/models.service';
+import { CategoriesService } from '../../core/categories.service';
 import { modelStats } from '../../core/model.util';
-import { Category, Model } from '../../core/models.types';
+import { Model, ModelCategory } from '../../core/models.types';
+import { resolveModelsBranch, setModelsBranch } from '../../core/models-branch.util';
 
 @Component({
   selector: 'app-models',
@@ -17,13 +19,10 @@ import { Category, Model } from '../../core/models.types';
 
     <div class="container toolbar">
       <div class="tabs">
-        <a routerLink="/models" [class.on]="!category">All</a>
-        <span class="tabs__sep"></span>
-        <a routerLink="/models/women" [class.on]="category === 'women'">Women</a>
-        <span class="tabs__sep"></span>
-        <a routerLink="/models/men" [class.on]="category === 'men'">Men</a>
-        <span class="tabs__sep"></span>
-        <a routerLink="/models/new-faces" [class.on]="category === 'new-faces'">New Faces</a>
+        <ng-container *ngFor="let c of tabCategories; let first = first">
+          <span class="tabs__sep" *ngIf="!first"></span>
+          <a [routerLink]="['/models', c.id]" [class.on]="category === c.id">{{ c.name }}</a>
+        </ng-container>
       </div>
       <label class="oot">
         <input type="checkbox" [checked]="onlyOutOfTown" (change)="toggleOutOfTown()" />
@@ -212,27 +211,43 @@ export class ModelsComponent implements OnInit {
 
   all: Model[] = [];
   visible: Model[] = [];
-  category: Category | undefined;
+  categories: ModelCategory[] = [];
+  category = '';
   onlyOutOfTown = false;
   loading = true;
+  branch: 'men' | 'women' | null = null;
 
-  constructor(private route: ActivatedRoute, private models: ModelsService) {}
+  constructor(
+    private route: ActivatedRoute,
+    private models: ModelsService,
+    private categoriesSvc: CategoriesService,
+  ) {}
 
-  ngOnInit() {
+  async ngOnInit() {
+    this.categories = await this.categoriesSvc.listPublished();
     this.route.paramMap.subscribe(async (params) => {
-      const cat = params.get('category') as Category | null;
-      this.category = cat ?? undefined;
+      const cat = params.get('category') ?? '';
+      this.category = cat;
+      this.branch = resolveModelsBranch(cat);
+      if (cat === 'men' || cat === 'women') {
+        setModelsBranch(cat);
+      }
       await this.load();
     });
   }
 
-  get heading(): string {
-    switch (this.category) {
-      case 'women': return 'Women';
-      case 'men': return 'Men';
-      case 'new-faces': return 'New Faces';
-      default: return 'Models';
+  get tabCategories(): ModelCategory[] {
+    if (this.branch === 'men') {
+      return this.categories.filter((c) => c.id !== 'women');
     }
+    if (this.branch === 'women') {
+      return this.categories.filter((c) => c.id !== 'men');
+    }
+    return this.categories;
+  }
+
+  get heading(): string {
+    return this.categoriesSvc.nameFor(this.category, this.categories);
   }
 
   async load() {

@@ -16,7 +16,9 @@ import { filter } from 'rxjs/operators';
         <nav class="hdr__nav" [class.is-open]="open" [class.hdr__nav--overlay]="isOverlay">
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" (click)="close()">Home</a>
           <a routerLink="/about" routerLinkActive="active" (click)="close()">About</a>
-          <a routerLink="/models" routerLinkActive="active" (click)="close()">Models</a>
+          <a routerLink="/models" routerLinkActive="active"
+             [routerLinkActiveOptions]="{ paths: 'subset', queryParams: 'ignored', fragment: 'ignored', matrixParams: 'ignored' }"
+             (click)="close()">Models</a>
           <a routerLink="/services" routerLinkActive="active" (click)="close()">Services</a>
           <a routerLink="/become-a-model" routerLinkActive="active" (click)="close()">Become a Model</a>
           <a routerLink="/book" routerLinkActive="active" (click)="close()">Book</a>

@@ -6,7 +6,7 @@ import { ModelsService } from '../../core/models.service';
 import { SubmissionsService } from '../../core/submissions.service';
 import { AuthService } from '../../core/auth.service';
 import { ApiService } from '../../core/api.service';
-import { Booking, Category, Model, ModelApplication } from '../../core/models.types';
+import { Booking, Model, ModelApplication, ModelCategory } from '../../core/models.types';
 import { digitalsNameSlug } from '../../core/model.util';
 import {
   applicationToRecord,
@@ -18,12 +18,14 @@ import {
   FormRecord,
 } from '../../core/submission-export.util';
 import { AdminServicesComponent } from './admin-services.component';
+import { AdminCategoriesComponent } from './admin-categories.component';
 import { FileUploadComponent } from '../../shared/file-upload.component';
+import { CategoriesService } from '../../core/categories.service';
 
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, AdminServicesComponent, FileUploadComponent],
+  imports: [CommonModule, FormsModule, AdminServicesComponent, AdminCategoriesComponent, FileUploadComponent],
   template: `
     <div class="container dash">
       <div class="dash__top">
@@ -36,6 +38,7 @@ import { FileUploadComponent } from '../../shared/file-upload.component';
 
       <nav class="dash__tabs">
         <button [class.on]="tab==='models'" (click)="tab='models'">Models ({{ models.length }})</button>
+        <button [class.on]="tab==='categories'" (click)="tab='categories'">Categories ({{ categories.length }})</button>
         <button [class.on]="tab==='apps'" (click)="tab='apps'">Applications ({{ apps.length }})</button>
         <button [class.on]="tab==='bookings'" (click)="tab='bookings'">Bookings ({{ bookings.length }})</button>
         <button [class.on]="tab==='services'" (click)="tab='services'">Services</button>
@@ -53,7 +56,7 @@ import { FileUploadComponent } from '../../shared/file-upload.component';
           <tbody>
             <tr *ngFor="let m of models">
               <td>{{ m.name }}</td>
-              <td>{{ m.category }}</td>
+              <td>{{ categoryName(m.category) }}</td>
               <td>{{ m.city || '—' }}</td>
               <td>{{ m.outOfTown ? 'Yes' : '—' }}</td>
               <td>{{ m.published ? 'Yes' : 'Hidden' }}</td>
@@ -64,6 +67,11 @@ import { FileUploadComponent } from '../../shared/file-upload.component';
             </tr>
           </tbody>
         </table>
+      </section>
+
+      <!-- CATEGORIES -->
+      <section *ngIf="tab==='categories'">
+        <app-admin-categories />
       </section>
 
       <!-- APPLICATIONS -->
@@ -178,10 +186,9 @@ import { FileUploadComponent } from '../../shared/file-upload.component';
             <div class="field"><label>Name</label><input name="name" [(ngModel)]="editing.name" required /></div>
             <div class="field">
               <label>Category</label>
-              <select name="category" [(ngModel)]="editing.category">
-                <option value="women">Women</option>
-                <option value="men">Men</option>
-                <option value="new-faces">New Faces</option>
+              <select name="category" [(ngModel)]="editing.category" required>
+                <option value="" disabled *ngIf="!categories.length">No categories — add one first</option>
+                <option *ngFor="let c of categories" [value]="c.id">{{ c.name }}</option>
               </select>
             </div>
             <div class="field"><label>City</label><input name="city" [(ngModel)]="editing.city" /></div>
@@ -573,8 +580,9 @@ import { FileUploadComponent } from '../../shared/file-upload.component';
   `],
 })
 export class AdminDashboardComponent implements OnInit {
-  tab: 'models' | 'apps' | 'bookings' | 'services' = 'models';
+  tab: 'models' | 'categories' | 'apps' | 'bookings' | 'services' = 'models';
   models: Model[] = [];
+  categories: ModelCategory[] = [];
   apps: ModelApplication[] = [];
   bookings: Booking[] = [];
   editing: Model = this.blank();
@@ -584,6 +592,7 @@ export class AdminDashboardComponent implements OnInit {
 
   constructor(
     private modelsSvc: ModelsService,
+    private categoriesSvc: CategoriesService,
     private subs: SubmissionsService,
     private auth: AuthService,
     private router: Router,
@@ -594,13 +603,19 @@ export class AdminDashboardComponent implements OnInit {
 
   async ngOnInit() {
     await this.refresh();
+    this.categories = await this.categoriesSvc.listAll();
     this.apps = await this.subs.listApplications();
     this.bookings = await this.subs.listBookings();
   }
 
+  categoryName(id: string): string {
+    return this.categoriesSvc.nameFor(id, this.categories);
+  }
+
   private blank(): Model {
+    const defaultCategory = this.categories[0]?.id ?? '';
     return {
-      id: '', name: '', category: 'women' as Category, outOfTown: false,
+      id: '', name: '', category: defaultCategory, outOfTown: false,
       published: true, coverImage: '',
       gallery: [], digitals: [],
     };
@@ -611,8 +626,11 @@ export class AdminDashboardComponent implements OnInit {
   }
 
   openAddModel() {
-    this.resetEditor();
-    this.modelModalOpen = true;
+    this.categoriesSvc.listAll().then((cats) => {
+      this.categories = cats;
+      this.resetEditor();
+      this.modelModalOpen = true;
+    });
   }
 
   edit(m: Model) {
@@ -634,7 +652,7 @@ export class AdminDashboardComponent implements OnInit {
   }
 
   async save() {
-    if (!this.editing.name || !this.editing.coverImage) return;
+    if (!this.editing.name || !this.editing.coverImage || !this.editing.category) return;
     this.editing.gallery = this.editing.gallery || [];
     this.editing.digitals = this.editing.digitals || [];
     if (!this.editing.pdfUrl?.trim()) this.editing.pdfUrl = undefined;

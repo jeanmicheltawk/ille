@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
-const { db, modelFromRow, serviceFromRow, submissionFromRow } = require('./db');
+const { db, modelFromRow, serviceFromRow, submissionFromRow, categoryFromRow } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -100,6 +100,16 @@ app.get('/api/models/:id', (req, res) => {
 });
 
 // ============================================================
+// PUBLIC CATEGORIES
+// ============================================================
+app.get('/api/categories', (req, res) => {
+  const rows = db.prepare(
+    'SELECT * FROM model_categories WHERE published = 1 ORDER BY sortOrder ASC, name ASC',
+  ).all();
+  res.json(rows.map(categoryFromRow));
+});
+
+// ============================================================
 // ADMIN MODELS (auth required)
 // ============================================================
 app.get('/api/admin/models', requireAuth, (req, res) => {
@@ -138,6 +148,53 @@ app.delete('/api/admin/models/:id', requireAuth, (req, res) => {
   db.prepare('DELETE FROM models WHERE id = ?').run(req.params.id);
   res.json({ ok: true });
 });
+
+// ============================================================
+// ADMIN CATEGORIES (auth required)
+// ============================================================
+app.get('/api/admin/categories', requireAuth, (req, res) => {
+  const rows = db.prepare(
+    'SELECT * FROM model_categories ORDER BY sortOrder ASC, name ASC',
+  ).all();
+  res.json(rows.map(categoryFromRow));
+});
+
+app.post('/api/admin/categories', requireAuth, (req, res) => {
+  const c = req.body;
+  db.prepare(`
+    INSERT INTO model_categories (id, name, sortOrder, published)
+    VALUES (@id, @name, @sortOrder, @published)
+  `).run(serializeCategory(c));
+  res.json({ ok: true });
+});
+
+app.put('/api/admin/categories/:id', requireAuth, (req, res) => {
+  const c = { ...req.body, id: req.params.id };
+  db.prepare(`
+    UPDATE model_categories SET name=@name, sortOrder=@sortOrder, published=@published
+    WHERE id=@id
+  `).run(serializeCategory(c));
+  res.json({ ok: true });
+});
+
+app.delete('/api/admin/categories/:id', requireAuth, (req, res) => {
+  const id = req.params.id;
+  const inUse = db.prepare('SELECT COUNT(*) AS c FROM models WHERE category = ?').get(id).c;
+  if (inUse > 0) {
+    return res.status(400).json({ error: `${inUse} model(s) still use this category` });
+  }
+  db.prepare('DELETE FROM model_categories WHERE id = ?').run(id);
+  res.json({ ok: true });
+});
+
+function serializeCategory(c) {
+  return {
+    id: c.id,
+    name: c.name,
+    sortOrder: c.sortOrder ?? 0,
+    published: c.published ? 1 : 0,
+  };
+}
 
 function serializeModel(m) {
   return {

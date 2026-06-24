@@ -15,7 +15,8 @@ export const routes: Routes = [
   },
   {
     path: 'models',
-    loadComponent: () => import('./pages/models/models.component').then((m) => m.ModelsComponent),
+    loadComponent: () =>
+      import('./pages/models/models-picker.component').then((m) => m.ModelsPickerComponent),
     title: 'Models — ille',
   },
   {

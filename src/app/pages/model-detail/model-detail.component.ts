@@ -4,6 +4,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ModelsService } from '../../core/models.service';
 import { Model } from '../../core/models.types';
 import { modelStats, ModelStat } from '../../core/model.util';
+import { modelsBackLink } from '../../core/models-branch.util';
 import { ModelProfileLinksComponent } from './model-profile-links.component';
 
 @Component({
@@ -53,7 +54,7 @@ import { ModelProfileLinksComponent } from './model-profile-links.component';
     <div class="model-page not-found" *ngIf="!model && !loading">
       <div class="container">
         <p>Model not found.</p>
-        <a routerLink="/models" class="back">Back to models</a>
+        <a [routerLink]="modelsBack()" class="back">Back to models</a>
       </div>
     </div>
   `,
@@ -176,4 +177,6 @@ export class ModelDetailComponent implements OnInit {
     const handle = this.instagramHandle;
     return handle ? `https://instagram.com/${handle}` : '#';
   }
+
+  modelsBack = modelsBackLink;
 }

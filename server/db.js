@@ -91,6 +91,14 @@ db.exec(`
     data TEXT NOT NULL,
     createdAt TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS model_categories (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    sortOrder INTEGER NOT NULL DEFAULT 0,
+    imageUrl TEXT,
+    published INTEGER NOT NULL DEFAULT 1
+  );
 `);
 
 function ensureColumn(table, column, ddl) {
@@ -116,6 +124,25 @@ if (!existingAdmin) {
   const hash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
   db.prepare('INSERT INTO users (email, passwordHash) VALUES (?, ?)').run(ADMIN_EMAIL, hash);
   console.log(`Seeded admin login -> ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+}
+
+// ---- seed model categories (only if table is empty) --------
+const categoryCount = db.prepare('SELECT COUNT(*) AS c FROM model_categories').get().c;
+if (categoryCount === 0) {
+  const seedCategories = [
+    ['women', 'Women', 0, 1],
+    ['new-faces', 'New Faces', 1, 1],
+    ['men', 'Men', 2, 1],
+  ];
+  const insertCategory = db.prepare(`
+    INSERT INTO model_categories (id, name, sortOrder, published)
+    VALUES (?, ?, ?, ?)
+  `);
+  const txCategories = db.transaction(() => {
+    for (const row of seedCategories) insertCategory.run(...row);
+  });
+  txCategories();
+  console.log(`Seeded ${seedCategories.length} model categories.`);
 }
 
 // ---- seed sample models (only if table is empty) -----------
@@ -194,6 +221,16 @@ function submissionFromRow(row) {
   };
 }
 
+function categoryFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    name: row.name,
+    sortOrder: row.sortOrder,
+    published: !!row.published,
+  };
+}
+
 const GUIDANCE_FIELDS = JSON.stringify([
   { id: 'firstName', type: 'text', label: 'First Name', width: 'half', rowGroup: 'name', sortOrder: 0, required: true },
   { id: 'lastName', type: 'text', label: 'Last Name', width: 'half', rowGroup: 'name', sortOrder: 1, required: true },
@@ -268,4 +305,4 @@ if (serviceCount === 0) {
   `).run();
 }
 
-module.exports = { db, modelFromRow, serviceFromRow, submissionFromRow, ADMIN_EMAIL };
+module.exports = { db, modelFromRow, serviceFromRow, submissionFromRow, categoryFromRow, ADMIN_EMAIL };

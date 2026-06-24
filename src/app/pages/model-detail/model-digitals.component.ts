@@ -4,6 +4,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ModelsService } from '../../core/models.service';
 import { Model } from '../../core/models.types';
 import { modelStats, ModelStat } from '../../core/model.util';
+import { modelsBackLink } from '../../core/models-branch.util';
 
 @Component({
   selector: 'app-model-digitals',
@@ -35,7 +36,7 @@ import { modelStats, ModelStat } from '../../core/model.util';
     <div class="model-page not-found" *ngIf="!model && !loading">
       <div class="digitals-wrap">
         <p>Digitals not found.</p>
-        <a routerLink="/models" class="back">Back to models</a>
+        <a [routerLink]="modelsBack()" class="back">Back to models</a>
       </div>
     </div>
   `,
@@ -148,4 +149,6 @@ export class ModelDigitalsComponent implements OnInit {
       this.loading = false;
     });
   }
+
+  modelsBack = modelsBackLink;
 }

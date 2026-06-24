@@ -1,6 +1,14 @@
 // Domain types shared across the app.
 
-export type Category = 'women' | 'men' | 'new-faces';
+/** URL slug stored on each model, e.g. "women", "new-faces". */
+export type Category = string;
+
+export interface ModelCategory {
+  id: string;
+  name: string;
+  sortOrder: number;
+  published: boolean;
+}
 
 export interface Model {
   id: string;
