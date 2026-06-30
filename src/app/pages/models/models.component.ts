@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ModelsService } from '../../core/models.service';
 import { CategoriesService } from '../../core/categories.service';
-import { modelStats } from '../../core/model.util';
+import { modelStats, normalizeModelCategory } from '../../core/model.util';
 import { Model, ModelCategory, ModelsBranch } from '../../core/models.types';
 import {
   isBranchCategory,
@@ -221,6 +221,7 @@ export class ModelsComponent implements OnInit {
   subCategory = '';
   onlyOutOfTown = false;
   loading = true;
+  private categoriesWithModels = new Set<string>();
 
   constructor(
     private route: ActivatedRoute,
@@ -246,13 +247,16 @@ export class ModelsComponent implements OnInit {
   }
 
   get tabCategories(): ModelCategory[] {
-    if (this.branch === 'men') {
-      return this.categories.filter((c) => c.id !== 'women');
-    }
-    if (this.branch === 'women') {
-      return this.categories.filter((c) => c.id !== 'men');
-    }
-    return this.categories;
+    const base =
+      this.branch === 'men'
+        ? this.categories.filter((c) => c.id !== 'women')
+        : this.branch === 'women'
+          ? this.categories.filter((c) => c.id !== 'men')
+          : this.categories;
+
+    return base.filter(
+      (c) => isBranchCategory(c.id) || this.categoriesWithModels.has(c.id),
+    );
   }
 
   tabLink(c: ModelCategory): string[] {
@@ -281,11 +285,22 @@ export class ModelsComponent implements OnInit {
     if (!this.branch) return;
 
     this.loading = true;
-    const filters = this.subCategory
-      ? { branch: this.branch, category: this.subCategory }
-      : { branch: this.branch };
+    const branchModels = await this.models.list({ branch: this.branch });
 
-    this.all = await this.models.list(filters);
+    this.categoriesWithModels = new Set(
+      branchModels.map((m) => normalizeModelCategory(m)).filter(Boolean),
+    );
+
+    if (this.subCategory && !this.categoriesWithModels.has(this.subCategory)) {
+      this.loading = false;
+      await this.router.navigate(modelsDivisionLink(this.branch), { replaceUrl: true });
+      return;
+    }
+
+    this.all = this.subCategory
+      ? branchModels.filter((m) => normalizeModelCategory(m) === this.subCategory)
+      : branchModels;
+
     this.applyFilter();
     this.loading = false;
   }
