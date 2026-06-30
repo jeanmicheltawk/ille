@@ -16,9 +16,8 @@ import { categoryNavLink, setModelsBranch } from '../../core/models-branch.util'
 
       <div class="hero__content">
         <nav class="hero__nav rise" style="animation-delay:.2s">
-          <a routerLink="/models" class="hero__link">Models</a>
-          <span class="hero__nav-gap"></span>
-          <a routerLink="/services" class="hero__link">Services</a>
+          <a routerLink="/models" class="hero__btn">Models</a>
+          <a routerLink="/services" class="hero__btn">Services</a>
         </nav>
 
         <p class="hero__tag rise" style="animation-delay:.35s">
@@ -110,24 +109,37 @@ import { categoryNavLink, setModelsBranch } from '../../core/models-branch.util'
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 0;
+      flex-wrap: wrap;
+      gap: 14px;
       margin-bottom: 48px;
     }
-    .hero__nav-gap {
-      width: 80px;
-    }
-    .hero__link {
+    .hero__btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 148px;
+      padding: 14px 32px;
       font-family: var(--body);
-      font-size: clamp(15px, 2.2vw, 20px);
+      font-size: 11px;
       font-weight: 300;
-      letter-spacing: 0.14em;
-      text-transform: capitalize;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
       color: #fff;
-      transition: opacity 0.4s ease, letter-spacing 0.4s ease;
+      text-decoration: none;
+      border: 1px solid rgba(255, 255, 255, 0.9);
+      background: rgba(255, 255, 255, 0.1);
+      backdrop-filter: blur(8px);
+      cursor: pointer;
+      transition: background 0.45s var(--ease), border-color 0.45s var(--ease), color 0.45s var(--ease);
     }
-    .hero__link:hover {
-      opacity: 0.7;
-      letter-spacing: 0.2em;
+    .hero__btn:hover {
+      background: #fff;
+      border-color: #fff;
+      color: #1a1a1a;
+    }
+    .hero__btn:focus-visible {
+      outline: 1px solid var(--accent);
+      outline-offset: 4px;
     }
 
     .hero__tag {
@@ -239,14 +251,14 @@ import { categoryNavLink, setModelsBranch } from '../../core/models-branch.util'
 
     @media (max-width: 760px) {
       .cats { gap: 8px 24px; padding: 60px 20px 80px; }
-      .hero__nav-gap { width: 48px; }
       .hero__headline { white-space: normal; }
       .hero__nav { margin-bottom: 36px; }
+      .hero__btn { min-width: 132px; padding: 13px 24px; }
     }
     @media (max-width: 480px) {
-      .hero__nav-gap { width: 32px; }
       .hero__tag { letter-spacing: 0.28em; }
       .hero__motto { letter-spacing: 0.3em; }
+      .hero__btn { width: 100%; max-width: 220px; }
     }
   `],
 })

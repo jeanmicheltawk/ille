@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ModelsService } from '../../core/models.service';
@@ -6,11 +6,12 @@ import { Model } from '../../core/models.types';
 import { modelStats, ModelStat } from '../../core/model.util';
 import { modelsBackLink } from '../../core/models-branch.util';
 import { ModelProfileLinksComponent } from './model-profile-links.component';
+import { ImageLightboxComponent } from '../../shared/image-lightbox.component';
 
 @Component({
   selector: 'app-model-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink, ModelProfileLinksComponent],
+  imports: [CommonModule, RouterLink, ModelProfileLinksComponent, ImageLightboxComponent],
   template: `
     <div class="model-page" *ngIf="model">
       <div class="container profile">
@@ -42,14 +43,32 @@ import { ModelProfileLinksComponent } from './model-profile-links.component';
         </div>
 
         <div class="profile__image">
-          <img [src]="model.coverImage" [alt]="model.name" />
+          <button type="button" class="image-btn" (click)="openLightbox(0)" aria-label="View cover image">
+            <img [src]="model.coverImage" [alt]="model.name" />
+          </button>
         </div>
       </div>
 
       <div class="container profile-gallery" *ngIf="model.gallery?.length">
-        <img *ngFor="let src of model.gallery" [src]="src" [alt]="model.name" />
+        <button
+          type="button"
+          class="image-btn"
+          *ngFor="let src of model.gallery; let i = index"
+          (click)="openLightbox(i + 1)"
+          [attr.aria-label]="'View image ' + (i + 2)"
+        >
+          <img [src]="src" [alt]="model.name" />
+        </button>
       </div>
     </div>
+
+    <app-image-lightbox
+      *ngIf="lightboxIndex !== null"
+      [images]="profileImages"
+      [index]="lightboxIndex"
+      [alt]="model?.name || 'Model photo'"
+      (closed)="closeLightbox()"
+    />
 
     <div class="model-page not-found" *ngIf="!model && !loading">
       <div class="container">
@@ -120,6 +139,21 @@ import { ModelProfileLinksComponent } from './model-profile-links.component';
       display: block;
       object-fit: cover;
     }
+    .image-btn {
+      display: block;
+      width: 100%;
+      padding: 0;
+      border: 0;
+      background: none;
+      cursor: zoom-in;
+      overflow: hidden;
+    }
+    .image-btn:hover img {
+      opacity: 0.92;
+    }
+    .image-btn img {
+      transition: opacity 0.3s ease;
+    }
     .profile-gallery {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -127,7 +161,7 @@ import { ModelProfileLinksComponent } from './model-profile-links.component';
       margin-top: 48px;
       padding-bottom: 24px;
     }
-    .profile-gallery img {
+    .profile-gallery .image-btn img {
       width: 100%;
       aspect-ratio: 2/3;
       object-fit: cover;
@@ -151,12 +185,28 @@ import { ModelProfileLinksComponent } from './model-profile-links.component';
     }
   `],
 })
-export class ModelDetailComponent implements OnInit {
+export class ModelDetailComponent implements OnInit, OnDestroy {
   model: Model | null = null;
   loading = true;
   stats: ModelStat[] = [];
+  lightboxIndex: number | null = null;
 
   constructor(private route: ActivatedRoute, private models: ModelsService) {}
+
+  get profileImages(): string[] {
+    if (!this.model) return [];
+    return [this.model.coverImage, ...(this.model.gallery || [])];
+  }
+
+  openLightbox(index: number) {
+    this.lightboxIndex = index;
+    document.body.style.overflow = 'hidden';
+  }
+
+  closeLightbox() {
+    this.lightboxIndex = null;
+    document.body.style.overflow = '';
+  }
 
   ngOnInit() {
     this.route.paramMap.subscribe(async (params) => {
@@ -166,6 +216,10 @@ export class ModelDetailComponent implements OnInit {
       this.stats = this.model ? modelStats(this.model) : [];
       this.loading = false;
     });
+  }
+
+  ngOnDestroy() {
+    document.body.style.overflow = '';
   }
 
   get instagramHandle(): string {

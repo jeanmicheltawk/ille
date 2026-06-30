@@ -7,7 +7,7 @@ import { filter } from 'rxjs/operators';
   standalone: true,
   imports: [RouterLink, RouterLinkActive],
   template: `
-    <header class="hdr" [class.is-scrolled]="scrolled" [class.hdr--overlay]="isOverlay">
+    <header class="hdr"  [class.hdr--overlay]="isOverlay">
       <div class="container hdr__row">
         <a routerLink="/" class="hdr__logo" aria-label="ille home">
           <img src="assets/ille-logo.png" alt="ille" class="hdr__logo-img" />

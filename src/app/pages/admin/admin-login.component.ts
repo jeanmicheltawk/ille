@@ -18,10 +18,7 @@ import { ApiService } from '../../core/api.service';
         Demo mode — backend isn't connected. Use password <strong>illedemo</strong>
         (any email) to preview the dashboard.
       </div>
-      <div *ngIf="connected" class="notice">
-        Default login: <strong>admin&#64;ille.co</strong> / <strong>illeadmin</strong>
-        (change it in the server's .env).
-      </div>
+
       <div *ngIf="error" class="notice notice--err">{{ error }}</div>
 
       <form (ngSubmit)="login()" #f="ngForm">

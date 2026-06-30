@@ -1,15 +1,16 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ModelsService } from '../../core/models.service';
 import { Model } from '../../core/models.types';
 import { modelStats, ModelStat } from '../../core/model.util';
 import { modelsBackLink } from '../../core/models-branch.util';
+import { ImageLightboxComponent } from '../../shared/image-lightbox.component';
 
 @Component({
   selector: 'app-model-digitals',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, ImageLightboxComponent],
   template: `
     <div class="model-page" *ngIf="model">
       <div class="digitals-wrap">
@@ -24,14 +25,30 @@ import { modelsBackLink } from '../../core/models-branch.util';
         </p>
 
         <div class="gallery" *ngIf="model.digitals?.length">
-          <img *ngFor="let src of model.digitals" [src]="src" [alt]="model.name + ' digital'" />
+          <button
+            type="button"
+            class="image-btn"
+            *ngFor="let src of model.digitals; let i = index"
+            (click)="openLightbox(i)"
+            [attr.aria-label]="'View digital ' + (i + 1)"
+          >
+            <img [src]="src" [alt]="model.name + ' digital'" />
+          </button>
         </div>
 
         <footer class="digitals-brand" *ngIf="model.digitals?.length">
-          <img src="assets/ille-logo.png" alt="ille" class="digitals-brand__logo" />
+          <img src="assets/ille-logo-black.png" alt="ille" class="digitals-brand__logo" />
         </footer>
       </div>
     </div>
+
+    <app-image-lightbox
+      *ngIf="lightboxIndex !== null && model"
+      [images]="model.digitals || []"
+      [index]="lightboxIndex"
+      [alt]="model.name + ' digital'"
+      (closed)="closeLightbox()"
+    />
 
     <div class="model-page not-found" *ngIf="!model && !loading">
       <div class="digitals-wrap">
@@ -94,7 +111,16 @@ import { modelsBackLink } from '../../core/models-branch.util';
       grid-template-columns: repeat(2, 1fr);
       gap: 10px;
     }
-    .gallery img {
+    .image-btn {
+      display: block;
+      width: 100%;
+      padding: 0;
+      border: 0;
+      background: none;
+      cursor: zoom-in;
+      overflow: hidden;
+    }
+    .gallery .image-btn img {
       width: 100%;
       height: auto;
       display: block;
@@ -108,7 +134,7 @@ import { modelsBackLink } from '../../core/models-branch.util';
       padding-bottom: 8px;
     }
     .digitals-brand__logo {
-      height: clamp(48px, 6vw, 64px);
+      height: clamp(120px, 6vw, 64px);
       width: auto;
       display: block;
     }
@@ -128,17 +154,29 @@ import { modelsBackLink } from '../../core/models-branch.util';
 
     @media (max-width: 520px) {
       .digitals-wrap { padding: 0 20px; }
-      .gallery { grid-template-columns: 1fr; gap: 8px; }
+      .gallery { gap: 6px; }
       .stats-bar { gap: 6px 18px; font-size: 10px; }
     }
   `],
 })
-export class ModelDigitalsComponent implements OnInit {
+export class ModelDigitalsComponent implements OnInit, OnDestroy {
   model: Model | null = null;
   loading = true;
   stats: ModelStat[] = [];
+  lightboxIndex: number | null = null;
 
   constructor(private route: ActivatedRoute, private models: ModelsService) {}
+
+  openLightbox(index: number) {
+    this.lightboxIndex = index;
+    document.body.style.overflow = 'hidden';
+  }
+
+  closeLightbox() {
+    this.lightboxIndex = null;
+    document.body.style.overflow = '';
+  }
+
 
   ngOnInit() {
     this.route.paramMap.subscribe(async (params) => {
@@ -148,6 +186,10 @@ export class ModelDigitalsComponent implements OnInit {
       this.stats = this.model ? modelStats(this.model) : [];
       this.loading = false;
     });
+  }
+
+  ngOnDestroy() {
+    document.body.style.overflow = '';
   }
 
   modelsBack(): string[] {
