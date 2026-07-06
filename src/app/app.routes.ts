@@ -68,6 +68,14 @@ export const routes: Routes = [
       import('./pages/services/service-book.component').then((m) => m.ServiceBookComponent),
   },
   {
+    path: 'newsletter/unsubscribe',
+    loadComponent: () =>
+      import('./pages/newsletter-unsubscribe/newsletter-unsubscribe.component').then(
+        (m) => m.NewsletterUnsubscribeComponent,
+      ),
+    title: 'Unsubscribe — ille',
+  },
+  {
     path: 'admin/login',
     loadComponent: () =>
       import('./pages/admin/admin-login.component').then((m) => m.AdminLoginComponent),

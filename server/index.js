@@ -8,7 +8,8 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
-const { db, modelFromRow, serviceFromRow, submissionFromRow, categoryFromRow } = require('./db');
+const { db, modelFromRow, serviceFromRow, submissionFromRow, categoryFromRow, subscriberFromRow } = require('./db');
+const email = require('./email');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -31,6 +32,7 @@ const storage = multer.diskStorage({
   },
 });
 const upload = multer({ storage, limits: { fileSize: 12 * 1024 * 1024 } });
+const uploadVideo = multer({ storage, limits: { fileSize: 100 * 1024 * 1024 } });
 
 // ---- auth helpers ------------------------------------------
 function requireAuth(req, res, next) {
@@ -47,6 +49,21 @@ function requireAuth(req, res, next) {
 
 const fileUrl = (req, filename) =>
   filename ? `${req.protocol}://${req.get('host')}/uploads/${filename}` : null;
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function activeSubscribers() {
+  return db.prepare('SELECT * FROM email_subscribers WHERE active = 1').all();
+}
+
+function notifyNewModel(model) {
+  if (!model.published) return;
+  const subs = activeSubscribers();
+  if (!subs.length) return;
+  email.notifySubscribers(subs, (sub) =>
+    email.sendNewModelNotice(sub.email, sub.unsubscribeToken, model),
+  ).catch((err) => console.error('[email] new model notify failed:', err));
+}
 
 function digitalsNameSlug(name) {
   return (name || '').trim().split(/\s+/)[0].toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -138,9 +155,11 @@ app.post('/api/admin/models', requireAuth, (req, res) => {
       @pdfUrl, @introVideoUrl, @catwalkVideoUrl, @published)
   `).run(serializeModel(m));
   res.json({ ok: true });
+  notifyNewModel(m);
 });
 
 app.put('/api/admin/models/:id', requireAuth, (req, res) => {
+  const prev = db.prepare('SELECT published FROM models WHERE id = ?').get(req.params.id);
   const m = { ...req.body, id: req.params.id };
   db.prepare(`
     UPDATE models SET name=@name, branch=@branch, category=@category, height=@height, bust=@bust,
@@ -152,6 +171,7 @@ app.put('/api/admin/models/:id', requireAuth, (req, res) => {
     WHERE id=@id
   `).run(serializeModel(m));
   res.json({ ok: true });
+  if (m.published && !prev?.published) notifyNewModel(m);
 });
 
 app.delete('/api/admin/models/:id', requireAuth, (req, res) => {
@@ -370,12 +390,95 @@ app.get('/api/admin/service-submissions', requireAuth, (req, res) => {
   res.json(rows.map(submissionFromRow));
 });
 
+// ============================================================
+// NEWSLETTER — public subscribe/unsubscribe + admin management
+// ============================================================
+app.post('/api/newsletter/subscribe', (req, res) => {
+  const raw = (req.body?.email || '').trim().toLowerCase();
+  if (!EMAIL_RE.test(raw)) {
+    return res.status(400).json({ error: 'Please enter a valid email address' });
+  }
+  const source = (req.body?.source || 'footer').slice(0, 64);
+  const existing = db.prepare('SELECT * FROM email_subscribers WHERE email = ?').get(raw);
+
+  if (existing) {
+    if (!existing.active) {
+      db.prepare('UPDATE email_subscribers SET active = 1, subscribedAt = datetime(\'now\') WHERE id = ?')
+        .run(existing.id);
+      email.sendWelcome(raw, existing.unsubscribeToken).catch((err) =>
+        console.error('[email] welcome resubscribe failed:', err),
+      );
+    }
+    return res.json({ ok: true });
+  }
+
+  const token = email.generateToken();
+  db.prepare(`
+    INSERT INTO email_subscribers (email, unsubscribeToken, source)
+    VALUES (?, ?, ?)
+  `).run(raw, token, source);
+  email.sendWelcome(raw, token).catch((err) =>
+    console.error('[email] welcome failed:', err),
+  );
+  res.json({ ok: true });
+});
+
+app.post('/api/newsletter/unsubscribe', (req, res) => {
+  const token = (req.body?.token || '').trim();
+  if (!token) return res.status(400).json({ error: 'Invalid unsubscribe link' });
+  const row = db.prepare('SELECT * FROM email_subscribers WHERE unsubscribeToken = ?').get(token);
+  if (!row) return res.status(404).json({ error: 'Subscription not found' });
+  db.prepare('UPDATE email_subscribers SET active = 0 WHERE id = ?').run(row.id);
+  res.json({ ok: true, email: row.email });
+});
+
+app.get('/api/admin/subscribers', requireAuth, (req, res) => {
+  const rows = db.prepare(
+    'SELECT * FROM email_subscribers WHERE active = 1 ORDER BY subscribedAt DESC',
+  ).all();
+  res.json(rows.map(subscriberFromRow));
+});
+
+app.delete('/api/admin/subscribers/:id', requireAuth, (req, res) => {
+  db.prepare('UPDATE email_subscribers SET active = 0 WHERE id = ?').run(req.params.id);
+  res.json({ ok: true });
+});
+
+app.post('/api/admin/newsletter/send', requireAuth, async (req, res) => {
+  const subject = (req.body?.subject || '').trim();
+  const message = (req.body?.message || '').trim();
+  if (!subject) return res.status(400).json({ error: 'Subject is required' });
+  if (!message) return res.status(400).json({ error: 'Message is required' });
+
+  const subs = activeSubscribers();
+  if (!subs.length) return res.status(400).json({ error: 'No active subscribers' });
+
+  try {
+    const result = await email.notifySubscribers(subs, (sub) =>
+      email.sendBroadcast(sub.email, sub.unsubscribeToken, subject, message),
+    );
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('[email] broadcast failed:', err);
+    res.status(500).json({ error: 'Failed to send newsletter' });
+  }
+});
+
+app.get('/api/admin/email-status', requireAuth, (req, res) => {
+  res.json({ configured: email.isConfigured(), siteUrl: email.siteUrl() });
+});
+
 app.post('/api/admin/upload', requireAuth, upload.single('image'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   res.json({ url: fileUrl(req, req.file.filename) });
 });
 
 app.post('/api/admin/upload-file', requireAuth, upload.single('file'), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  res.json({ url: fileUrl(req, req.file.filename) });
+});
+
+app.post('/api/admin/upload-video', requireAuth, uploadVideo.single('video'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   res.json({ url: fileUrl(req, req.file.filename) });
 });

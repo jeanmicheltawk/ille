@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { UploadService } from '../core/upload.service';
 
-export type FileUploadAccept = 'image' | 'pdf';
+export type FileUploadAccept = 'image' | 'pdf' | 'video';
 
 /**
  * Device file picker with preview. Works on desktop and mobile —
@@ -20,10 +20,16 @@ export type FileUploadAccept = 'image' | 'pdf';
   }],
   template: `
     <div class="file-upload" [class.file-upload--multi]="multiple">
-      <div class="file-upload__previews" *ngIf="previewUrls.length">
-        <figure class="file-upload__item" *ngFor="let url of previewUrls; let i = index">
-          <img *ngIf="accept === 'image'" [src]="url" alt="" />
-          <span *ngIf="accept === 'pdf'" class="file-upload__doc">PDF uploaded</span>
+      <div class="file-upload__previews" *ngIf="previewItems.length">
+        <figure
+          class="file-upload__item"
+          [class.file-upload__item--doc]="accept !== 'image'"
+          *ngFor="let item of previewItems; let i = index"
+        >
+          <img *ngIf="accept === 'image'" [src]="item.url" alt="" />
+          <span *ngIf="accept === 'pdf' || accept === 'video'" class="file-upload__doc" [title]="item.name">
+            {{ item.name }}
+          </span>
           <button type="button" class="file-upload__remove" (click)="remove(i)" aria-label="Remove">×</button>
         </figure>
       </div>
@@ -58,6 +64,13 @@ export type FileUploadAccept = 'image' | 'pdf';
       border: 1px solid var(--line);
       overflow: hidden;
     }
+    .file-upload__item--doc {
+      width: auto;
+      min-width: 120px;
+      max-width: 220px;
+      height: auto;
+      min-height: 56px;
+    }
     .file-upload__item img {
       width: 100%;
       height: 100%;
@@ -65,16 +78,14 @@ export type FileUploadAccept = 'image' | 'pdf';
       display: block;
     }
     .file-upload__doc {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      padding: 8px;
-      font-size: 10px;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
+      display: block;
+      padding: 28px 12px 12px;
+      font-size: 11px;
+      letter-spacing: 0.02em;
       text-align: center;
-      color: var(--ink-muted);
+      color: var(--ink-soft);
+      word-break: break-word;
+      line-height: 1.4;
     }
     .file-upload__remove {
       position: absolute;
@@ -142,18 +153,38 @@ export class FileUploadComponent implements ControlValueAccessor {
   uploading = false;
   error = '';
   private value: string | string[] = '';
+  private labels = new Map<string, string>();
   private onChange: (v: string | string[]) => void = () => {};
   private onTouched: () => void = () => {};
 
   constructor(private uploadSvc: UploadService) {}
 
   get acceptAttr(): string {
-    return this.accept === 'pdf' ? 'application/pdf,.pdf' : 'image/*';
+    if (this.accept === 'pdf') return 'application/pdf,.pdf';
+    if (this.accept === 'video') return 'video/*,.mp4,.mov,.webm';
+    return 'image/*';
   }
 
   get previewUrls(): string[] {
     if (this.multiple) return Array.isArray(this.value) ? this.value : [];
     return typeof this.value === 'string' && this.value ? [this.value] : [];
+  }
+
+  get previewItems(): { url: string; name: string }[] {
+    return this.previewUrls.map((url) => ({
+      url,
+      name: this.labels.get(url) ?? this.nameFromUrl(url),
+    }));
+  }
+
+  private nameFromUrl(url: string): string {
+    try {
+      const segment = decodeURIComponent(url.split('/').pop() || '');
+      const withoutTimestamp = segment.replace(/^\d+-/, '');
+      return withoutTimestamp || segment || 'Uploaded file';
+    } catch {
+      return 'Uploaded file';
+    }
   }
 
   writeValue(v: string | string[] | null): void {
@@ -180,7 +211,12 @@ export class FileUploadComponent implements ControlValueAccessor {
     try {
       const urls: string[] = [];
       for (const file of files) {
-        urls.push(await this.uploadSvc.upload(file));
+        const url =
+          this.accept === 'video'
+            ? await this.uploadSvc.uploadVideo(file)
+            : await this.uploadSvc.upload(file);
+        this.labels.set(url, file.name);
+        urls.push(url);
       }
       if (this.multiple) {
         const current = Array.isArray(this.value) ? this.value : [];
@@ -198,6 +234,10 @@ export class FileUploadComponent implements ControlValueAccessor {
   }
 
   remove(index: number) {
+    const urls = this.previewUrls;
+    const removed = urls[index];
+    if (removed) this.labels.delete(removed);
+
     if (this.multiple) {
       const current = Array.isArray(this.value) ? [...this.value] : [];
       current.splice(index, 1);

@@ -8,33 +8,6 @@ import {
   ServiceSubmission,
 } from './models.types';
 
-const GUIDANCE_FIELDS: ServiceFormField[] = [
-  { id: 'firstName', type: 'text', label: 'First Name', width: 'half', rowGroup: 'name', sortOrder: 0, required: true },
-  { id: 'lastName', type: 'text', label: 'Last Name', width: 'half', rowGroup: 'name', sortOrder: 1, required: true },
-  { id: 'email', type: 'email', label: 'Email', width: 'full', sortOrder: 2, required: true },
-  { id: 'phone', type: 'phone', label: 'Phone Number', width: 'full', sortOrder: 3, required: true },
-  {
-    id: 'session-info',
-    type: 'info',
-    label: '',
-    helpText:
-      'Advanced guidance consultation is more complex to improve the skills you already have. It is recommended for people who already know posing and want to take their skills to the next level.',
-    width: 'full',
-    sortOrder: 4,
-    required: false,
-  },
-  {
-    id: 'session',
-    type: 'radio',
-    label: 'Select Session',
-    options: ['LIVE SESSION', 'ONLINE SESSION'],
-    width: 'full',
-    sortOrder: 5,
-    required: true,
-  },
-  { id: 'instagram', type: 'text', label: 'Instagram', placeholder: '@username', width: 'full', sortOrder: 6, required: true },
-];
-
 @Injectable({ providedIn: 'root' })
 export class ServicesService {
   private mockSubmissions: ServiceSubmission[] = [];
@@ -42,44 +15,7 @@ export class ServicesService {
   private mock: ServiceItem[] = [
     { id: 'heading-events', type: 'events_heading', title: 'Upcoming Events', sortOrder: 0, published: true },
     { id: 'model-camp', type: 'program', title: 'Model Camp', subtitle: 'model edition', badge: 'Soon', sortOrder: 1, published: true },
-    {
-      id: 'one-on-one',
-      type: 'promo',
-      title: 'Book your one on one session',
-      formEnabled: true,
-      formTitle: 'One on One Session',
-      backgroundImage: 'https://picsum.photos/seed/oneonone/1920/1080',
-      formFields: [
-        { id: 'firstName', type: 'text', label: 'First Name', width: 'half', rowGroup: 'name', sortOrder: 0, required: true },
-        { id: 'lastName', type: 'text', label: 'Last Name', width: 'half', rowGroup: 'name', sortOrder: 1, required: true },
-        { id: 'email', type: 'email', label: 'Email', width: 'full', sortOrder: 2, required: true },
-        { id: 'phone', type: 'phone', label: 'Phone Number', width: 'full', sortOrder: 3, required: true },
-        { id: 'preferredDate', type: 'date', label: 'Preferred Date', width: 'half', rowGroup: 'schedule', sortOrder: 4, required: true },
-        { id: 'preferredTime', type: 'time', label: 'Preferred Time', width: 'half', rowGroup: 'schedule', sortOrder: 5, required: true },
-        { id: 'notes', type: 'textarea', label: 'Notes', width: 'full', sortOrder: 6, required: true },
-      ],
-      ctaLabel: 'Submit',
-      sortOrder: 2,
-      published: true,
-    },
-    { id: 'heading-services', type: 'services_heading', title: 'Discover our services', sortOrder: 3, published: true },
-    { id: 'posing', type: 'offering', title: 'Posing', sortOrder: 4, published: true },
-    { id: 'catwalk', type: 'offering', title: 'Catwalk', sortOrder: 5, published: true },
-    { id: 'facial-expressions', type: 'offering', title: 'Facial Expressions', sortOrder: 6, published: true },
-    { id: 'body-movement', type: 'offering', title: 'Body Movement', sortOrder: 7, published: true },
-    { id: 'flexibility-posture', type: 'offering', title: 'Flexibility and Posture', sortOrder: 8, published: true },
-    {
-      id: 'guidance-consultation',
-      type: 'promo',
-      title: 'Book Your Guidance Consultation',
-      formEnabled: true,
-      formTitle: 'Guidance Consultation',
-      backgroundImage: 'https://picsum.photos/seed/guidance/1920/1080',
-      formFields: GUIDANCE_FIELDS,
-      ctaLabel: 'Submit',
-      sortOrder: 9,
-      published: true,
-    },
+    { id: 'heading-services', type: 'services_heading', title: 'Discover our services', sortOrder: 2, published: true },
   ];
 
   constructor(private api: ApiService, private upload: UploadService) {}

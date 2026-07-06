@@ -128,3 +128,11 @@ export interface ServiceSubmission {
   data: Record<string, string>;
   createdAt?: string;
 }
+
+export interface EmailSubscriber {
+  id?: number;
+  email: string;
+  active?: boolean;
+  source?: string;
+  subscribedAt?: string;
+}

@@ -1,10 +1,13 @@
 import { Component } from '@angular/core';
 import { RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
+import { CommonModule } from '@angular/common';
+import { NewsletterService } from '../core/newsletter.service';
 
 @Component({
   selector: 'app-footer',
   standalone: true,
-  imports: [RouterLink],
+  imports: [RouterLink, FormsModule, CommonModule],
   template: `
     <footer class="ftr">
       <div class="ftr__line"></div>
@@ -36,6 +39,26 @@ import { RouterLink } from '@angular/router';
           <a routerLink="/become-a-model">Become a Model</a>
           <a routerLink="/book">Book a Model</a>
         </div>
+
+        <div class="ftr__col ftr__newsletter">
+          <div class="ftr__h">Stay updated</div>
+          <p class="ftr__newsletter-desc">New models &amp; agency news</p>
+          <form class="ftr__form" (ngSubmit)="subscribe()" *ngIf="!subscribed">
+            <input
+              type="email"
+              name="email"
+              [(ngModel)]="email"
+              placeholder="Your email"
+              required
+              [disabled]="loading"
+            />
+            <button type="submit" [disabled]="loading || !email.trim()">
+              {{ loading ? '…' : 'Subscribe' }}
+            </button>
+          </form>
+          <p class="ftr__newsletter-ok" *ngIf="subscribed">You're subscribed. Thank you.</p>
+          <p class="ftr__newsletter-err" *ngIf="error">{{ error }}</p>
+        </div>
       </div>
       <div class="container ftr__base">
         <span>© {{ year }} ille — All rights reserved</span>
@@ -56,8 +79,8 @@ import { RouterLink } from '@angular/router';
     }
     .ftr__grid {
       display: grid;
-      grid-template-columns: 1.6fr 1fr 1fr 1fr;
-      gap: 48px;
+      grid-template-columns: 1.4fr 1fr 1fr 1fr 1.2fr;
+      gap: 40px;
     }
     .ftr__logo { height: 36px; width: auto; opacity: 0.9; margin-bottom: 16px; }
     .ftr__addr {
@@ -84,6 +107,55 @@ import { RouterLink } from '@angular/router';
       color: var(--ink-muted);
       margin-bottom: 10px;
     }
+    .ftr__newsletter-desc {
+      margin: 0 0 12px;
+      font-size: 12px;
+      color: var(--ink-muted);
+      font-weight: 200;
+      line-height: 1.6;
+    }
+    .ftr__form {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .ftr__form input {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--ink);
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 200;
+      font-family: inherit;
+    }
+    .ftr__form button {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--ink-soft);
+      padding: 10px 12px;
+      font-size: 9px;
+      letter-spacing: 0.24em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: color 0.4s ease, border-color 0.4s ease;
+    }
+    .ftr__form button:hover:not(:disabled) {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    .ftr__form button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ftr__newsletter-ok {
+      font-size: 12px;
+      color: var(--accent);
+      margin: 0;
+      font-weight: 300;
+    }
+    .ftr__newsletter-err {
+      font-size: 12px;
+      color: #c44;
+      margin: 8px 0 0;
+      font-weight: 300;
+    }
     .ftr__base {
       display: flex; justify-content: space-between; align-items: center;
       margin-top: 64px;
@@ -101,7 +173,7 @@ import { RouterLink } from '@angular/router';
       transition: color 0.4s ease;
     }
     .ftr__admin:hover { color: var(--accent); }
-    @media (max-width: 860px) { .ftr__grid { grid-template-columns: 1fr 1fr; gap: 36px; } }
+    @media (max-width: 1020px) { .ftr__grid { grid-template-columns: 1fr 1fr; gap: 36px; } }
     @media (max-width: 520px) {
       .ftr__grid { grid-template-columns: 1fr; }
       .ftr__base { flex-direction: column; gap: 16px; }
@@ -110,4 +182,26 @@ import { RouterLink } from '@angular/router';
 })
 export class FooterComponent {
   year = new Date().getFullYear();
+  email = '';
+  loading = false;
+  subscribed = false;
+  error = '';
+
+  constructor(private newsletter: NewsletterService) {}
+
+  async subscribe() {
+    const value = this.email.trim();
+    if (!value) return;
+    this.loading = true;
+    this.error = '';
+    try {
+      await this.newsletter.subscribe(value, 'footer');
+      this.subscribed = true;
+      this.email = '';
+    } catch {
+      this.error = 'Could not subscribe. Please try again.';
+    } finally {
+      this.loading = false;
+    }
+  }
 }

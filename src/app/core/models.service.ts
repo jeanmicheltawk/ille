@@ -17,39 +17,7 @@ export interface ModelListFilters {
 export class ModelsService {
   constructor(private api: ApiService, private upload: UploadService) {}
 
-  private mock: Model[] = [
-    this.m('amara-okafor', 'Amara Okafor', 'women', '', { height: 178, city: 'Beirut', outOfTown: false }),
-    this.m('lia-fontaine', 'Lia Fontaine', 'women', '', { height: 176, city: 'Paris', outOfTown: true }),
-    this.m('noor-haddad', 'Noor Haddad', 'women', '', { height: 174, city: 'Beirut', outOfTown: false }),
-    this.m('sofia-marchetti', 'Sofia Marchetti', 'women', '', { height: 180, city: 'Milan', outOfTown: true }),
-    this.m('karim-saliba', 'Karim Saliba', 'men', '', { height: 187, city: 'Beirut', outOfTown: false }),
-    this.m('luca-romano', 'Luca Romano', 'men', '', { height: 189, city: 'Rome', outOfTown: true }),
-    this.m('jad-khoury', 'Jad Khoury', 'men', '', { height: 185, city: 'Beirut', outOfTown: false }),
-    this.m('elif-demir', 'Elif Demir', 'women', 'new-faces', { height: 177, city: 'Istanbul', outOfTown: true }),
-    this.m('maya-rizk', 'Maya Rizk', 'men', 'new-faces', { height: 175, city: 'Beirut', outOfTown: false }),
-  ];
-
-  private m(id: string, name: string, branch: ModelsBranch, category: Category, extra: Partial<Model>): Model {
-    return {
-      id, name, branch, category,
-      coverImage: `https://picsum.photos/seed/${id}/640/880`,
-      gallery: [
-        `https://picsum.photos/seed/${id}-g1/640/960`,
-        `https://picsum.photos/seed/${id}-g2/640/960`,
-        `https://picsum.photos/seed/${id}-g3/640/960`,
-        `https://picsum.photos/seed/${id}-g4/640/960`,
-      ],
-      digitals: [
-        `https://picsum.photos/seed/${id}-d1/640/960`,
-        `https://picsum.photos/seed/${id}-d2/640/960`,
-        `https://picsum.photos/seed/${id}-d3/640/960`,
-        `https://picsum.photos/seed/${id}-d4/640/960`,
-      ],
-      outOfTown: false, published: true,
-      bust: 84, waist: 61, hips: 89, shoeSize: 40, hair: 'Brown', eyes: 'Brown',
-      ...extra,
-    };
-  }
+  private mock: Model[] = [];
 
   async list(filters?: ModelListFilters): Promise<Model[]> {
     if (this.api.useApi) {

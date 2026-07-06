@@ -99,6 +99,15 @@ db.exec(`
     imageUrl TEXT,
     published INTEGER NOT NULL DEFAULT 1
   );
+
+  CREATE TABLE IF NOT EXISTS email_subscribers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE NOT NULL,
+    unsubscribeToken TEXT UNIQUE NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    source TEXT DEFAULT 'footer',
+    subscribedAt TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 function ensureColumn(table, column, ddl) {
@@ -119,8 +128,6 @@ ensureColumn('models', 'branch', `ALTER TABLE models ADD COLUMN branch TEXT NOT 
 // Legacy rows stored men/women in category — split into branch + sub-category.
 db.prepare(`UPDATE models SET branch = 'men', category = '' WHERE category = 'men'`).run();
 db.prepare(`UPDATE models SET branch = 'women', category = '' WHERE category = 'women'`).run();
-db.prepare(`UPDATE models SET branch = 'men' WHERE id = 'maya-rizk'`).run();
-db.prepare(`UPDATE models SET branch = 'women' WHERE id = 'elif-demir'`).run();
 
 // ---- seed the admin user -----------------------------------
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@ille.co';
@@ -138,7 +145,7 @@ const categoryCount = db.prepare('SELECT COUNT(*) AS c FROM model_categories').g
 if (categoryCount === 0) {
   const seedCategories = [
     ['women', 'Women', 0, 1],
-    ['new-faces', 'New Faces', 1, 1],
+    // ['new-faces', 'New Faces', 1, 1],
     ['men', 'Men', 2, 1],
   ];
   const insertCategory = db.prepare(`
@@ -150,52 +157,6 @@ if (categoryCount === 0) {
   });
   txCategories();
   console.log(`Seeded ${seedCategories.length} model categories.`);
-}
-
-// ---- seed sample models (only if table is empty) -----------
-const count = db.prepare('SELECT COUNT(*) AS c FROM models').get().c;
-if (count === 0) {
-  const sample = [
-    ['amara-okafor', 'Amara Okafor', 'women', '', 178, 'Beirut', 0],
-    ['lia-fontaine', 'Lia Fontaine', 'women', '', 176, 'Paris', 1],
-    ['noor-haddad', 'Noor Haddad', 'women', '', 174, 'Beirut', 0],
-    ['sofia-marchetti', 'Sofia Marchetti', 'women', '', 180, 'Milan', 1],
-    ['karim-saliba', 'Karim Saliba', 'men', '', 187, 'Beirut', 0],
-    ['luca-romano', 'Luca Romano', 'men', '', 189, 'Rome', 1],
-    ['jad-khoury', 'Jad Khoury', 'men', '', 185, 'Beirut', 0],
-    ['elif-demir', 'Elif Demir', 'women', 'new-faces', 177, 'Istanbul', 1],
-    ['maya-rizk', 'Maya Rizk', 'men', 'new-faces', 175, 'Beirut', 0],
-  ];
-  const insert = db.prepare(`
-    INSERT INTO models (id, name, branch, category, height, bust, waist, hips, shoeSize,
-      hair, eyes, city, outOfTown, instagram, coverImage, gallery, digitals,
-      pdfUrl, introVideoUrl, catwalkVideoUrl, published)
-    VALUES (@id, @name, @branch, @category, @height, 84, 61, 89, 40,
-      'Brown', 'Brown', @city, @outOfTown, '@'||@id, @coverImage, @gallery, @digitals,
-      NULL, NULL, NULL, 1)
-  `);
-  const tx = db.transaction(() => {
-    for (const [id, name, branch, category, height, city, oot] of sample) {
-      insert.run({
-        id, name, branch, category, height, city, outOfTown: oot,
-        coverImage: `https://picsum.photos/seed/${id}/640/880`,
-        gallery: JSON.stringify([
-          `https://picsum.photos/seed/${id}-g1/640/960`,
-          `https://picsum.photos/seed/${id}-g2/640/960`,
-          `https://picsum.photos/seed/${id}-g3/640/960`,
-          `https://picsum.photos/seed/${id}-g4/640/960`,
-        ]),
-        digitals: JSON.stringify([
-          `https://picsum.photos/seed/${id}-d1/640/960`,
-          `https://picsum.photos/seed/${id}-d2/640/960`,
-          `https://picsum.photos/seed/${id}-d3/640/960`,
-          `https://picsum.photos/seed/${id}-d4/640/960`,
-        ]),
-      });
-    }
-  });
-  tx();
-  console.log(`Seeded ${sample.length} sample models.`);
 }
 
 // ---- mappers ------------------------------------------------
@@ -253,32 +214,16 @@ function categoryFromRow(row) {
   };
 }
 
-const GUIDANCE_FIELDS = JSON.stringify([
-  { id: 'firstName', type: 'text', label: 'First Name', width: 'half', rowGroup: 'name', sortOrder: 0, required: true },
-  { id: 'lastName', type: 'text', label: 'Last Name', width: 'half', rowGroup: 'name', sortOrder: 1, required: true },
-  { id: 'email', type: 'email', label: 'Email', width: 'full', sortOrder: 2, required: true },
-  { id: 'phone', type: 'phone', label: 'Phone Number', width: 'full', sortOrder: 3, required: true },
-  {
-    id: 'session-info',
-    type: 'info',
-    label: '',
-    helpText:
-      'Advanced guidance consultation is more complex to improve the skills you already have. It is recommended for people who already know posing and want to take their skills to the next level.',
-    width: 'full',
-    sortOrder: 4,
-    required: false,
-  },
-  {
-    id: 'session',
-    type: 'radio',
-    label: 'Select Session',
-    options: ['LIVE SESSION', 'ONLINE SESSION'],
-    width: 'full',
-    sortOrder: 5,
-    required: true,
-  },
-  { id: 'instagram', type: 'text', label: 'Instagram', placeholder: '@username', width: 'full', sortOrder: 6, required: true },
-]);
+function subscriberFromRow(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    email: row.email,
+    active: !!row.active,
+    source: row.source || 'footer',
+    subscribedAt: row.subscribedAt,
+  };
+}
 
 // ---- seed service items (only if table is empty) -----------
 const serviceCount = db.prepare('SELECT COUNT(*) AS c FROM service_items').get().c;
@@ -286,22 +231,7 @@ if (serviceCount === 0) {
   const seedServices = [
     ['heading-events', 'events_heading', 'Upcoming Events', null, null, null, null, null, 0, 1, 0, null, null, '[]'],
     ['model-camp', 'program', 'Model Camp', 'model edition', 'Soon', null, null, null, 1, 1, 0, null, null, '[]'],
-    ['one-on-one', 'promo', 'Book your one on one session', null, null, null, 'Submit', '/services/one-on-one/book', 2, 1, 1, 'One on One Session', 'https://picsum.photos/seed/oneonone/1920/1080', JSON.stringify([
-      { id: 'firstName', type: 'text', label: 'First Name', width: 'half', rowGroup: 'name', sortOrder: 0, required: true },
-      { id: 'lastName', type: 'text', label: 'Last Name', width: 'half', rowGroup: 'name', sortOrder: 1, required: true },
-      { id: 'email', type: 'email', label: 'Email', width: 'full', sortOrder: 2, required: true },
-      { id: 'phone', type: 'phone', label: 'Phone Number', width: 'full', sortOrder: 3, required: true },
-      { id: 'preferredDate', type: 'date', label: 'Preferred Date', width: 'half', rowGroup: 'schedule', sortOrder: 4, required: true },
-      { id: 'preferredTime', type: 'time', label: 'Preferred Time', width: 'half', rowGroup: 'schedule', sortOrder: 5, required: true },
-      { id: 'notes', type: 'textarea', label: 'Notes', width: 'full', sortOrder: 6, required: true },
-    ])],
-    ['heading-services', 'services_heading', 'Discover our services', null, null, null, null, null, 3, 1, 0, null, null, '[]'],
-    ['posing', 'offering', 'Posing', null, null, null, null, null, 4, 1, 0, null, null, '[]'],
-    ['catwalk', 'offering', 'Catwalk', null, null, null, null, null, 5, 1, 0, null, null, '[]'],
-    ['facial-expressions', 'offering', 'Facial Expressions', null, null, null, null, null, 6, 1, 0, null, null, '[]'],
-    ['body-movement', 'offering', 'Body Movement', null, null, null, null, null, 7, 1, 0, null, null, '[]'],
-    ['flexibility-posture', 'offering', 'Flexibility and Posture', null, null, null, null, null, 8, 1, 0, null, null, '[]'],
-    ['guidance-consultation', 'promo', 'Book Your Guidance Consultation', null, null, null, 'Submit', '/services/guidance-consultation/book', 9, 1, 1, 'Guidance Consultation', 'https://picsum.photos/seed/guidance/1920/1080', GUIDANCE_FIELDS],
+    ['heading-services', 'services_heading', 'Discover our services', null, null, null, null, null, 2, 1, 0, null, null, '[]'],
   ];
   const insertService = db.prepare(`
     INSERT INTO service_items (id, type, title, subtitle, badge, description, ctaLabel, ctaUrl, sortOrder, published, formEnabled, formTitle, backgroundImage, formFields)
@@ -312,19 +242,14 @@ if (serviceCount === 0) {
   });
   txServices();
   console.log(`Seeded ${seedServices.length} service items.`);
-} else {
-  db.prepare(`
-    UPDATE service_items SET formEnabled = 1, formTitle = 'Guidance Consultation',
-      backgroundImage = COALESCE(backgroundImage, 'https://picsum.photos/seed/guidance/1920/1080'),
-      formFields = CASE WHEN formFields = '[]' OR formFields IS NULL THEN ? ELSE formFields END,
-      ctaUrl = '/services/guidance-consultation/book'
-    WHERE id = 'guidance-consultation'
-  `).run(GUIDANCE_FIELDS);
-  db.prepare(`
-    UPDATE service_items SET formEnabled = 1, formTitle = 'One on One Session',
-      ctaUrl = '/services/one-on-one/book'
-    WHERE id = 'one-on-one' AND (formFields = '[]' OR formFields IS NULL)
-  `).run();
 }
 
-module.exports = { db, modelFromRow, serviceFromRow, submissionFromRow, categoryFromRow, ADMIN_EMAIL };
+module.exports = {
+  db,
+  modelFromRow,
+  serviceFromRow,
+  submissionFromRow,
+  categoryFromRow,
+  subscriberFromRow,
+  ADMIN_EMAIL,
+};

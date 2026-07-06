@@ -6,8 +6,8 @@ import { ModelCategory } from './models.types';
 export class CategoriesService {
   private mock: ModelCategory[] = [
     { id: 'women', name: 'Women', sortOrder: 0, published: true },
-    { id: 'new-faces', name: 'New Faces', sortOrder: 1, published: true },
-    { id: 'men', name: 'Men', sortOrder: 2, published: true },
+    // { id: 'new-faces', name: 'New Faces', sortOrder: 1, published: true },
+    { id: 'men', name: 'Men', sortOrder: 1, published: true },
   ];
 
   constructor(private api: ApiService) {}

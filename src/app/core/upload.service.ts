@@ -21,4 +21,12 @@ export class UploadService {
     const res = await this.api.upload<{ url: string }>('/admin/upload', form);
     return res.url;
   }
+
+  async uploadVideo(file: File): Promise<string> {
+    if (!this.api.useApi) return URL.createObjectURL(file);
+    const form = new FormData();
+    form.append('video', file);
+    const res = await this.api.upload<{ url: string }>('/admin/upload-video', form);
+    return res.url;
+  }
 }

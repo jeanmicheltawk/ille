@@ -20,13 +20,14 @@ import {
 } from '../../core/submission-export.util';
 import { AdminServicesComponent } from './admin-services.component';
 import { AdminCategoriesComponent } from './admin-categories.component';
+import { AdminSubscribersComponent } from './admin-subscribers.component';
 import { FileUploadComponent } from '../../shared/file-upload.component';
 import { CategoriesService } from '../../core/categories.service';
 
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, AdminServicesComponent, AdminCategoriesComponent, FileUploadComponent],
+  imports: [CommonModule, FormsModule, AdminServicesComponent, AdminCategoriesComponent, AdminSubscribersComponent, FileUploadComponent],
   template: `
     <div class="container dash">
       <div class="dash__top">
@@ -42,6 +43,7 @@ import { CategoriesService } from '../../core/categories.service';
         <button [class.on]="tab==='categories'" (click)="setTab('categories')">Categories ({{ categories.length }})</button>
         <button [class.on]="tab==='apps'" (click)="setTab('apps')">Applications ({{ apps.length }})</button>
         <button [class.on]="tab==='bookings'" (click)="setTab('bookings')">Bookings ({{ bookings.length }})</button>
+        <button [class.on]="tab==='subscribers'" (click)="setTab('subscribers')">Subscribers</button>
         <button [class.on]="tab==='services'" (click)="setTab('services')">Services</button>
       </nav>
 
@@ -151,6 +153,11 @@ import { CategoriesService } from '../../core/categories.service';
       <!-- SERVICES -->
       <section *ngIf="tab==='services'">
         <app-admin-services />
+      </section>
+
+      <!-- SUBSCRIBERS -->
+      <section *ngIf="tab==='subscribers'">
+        <app-admin-subscribers />
       </section>
 
       <div class="form-modal-backdrop" *ngIf="viewingForm" (click)="closeFormView()">
@@ -272,12 +279,24 @@ import { CategoriesService } from '../../core/categories.service';
               />
             </div>
             <div class="field">
-              <label>Introduction video URL</label>
-              <input name="introVideo" [(ngModel)]="editing.introVideoUrl" placeholder="YouTube, Vimeo, or direct .mp4 URL" />
+              <label>Introduction video</label>
+              <app-file-upload
+                name="introVideo"
+                [(ngModel)]="editing.introVideoUrl"
+                accept="video"
+                label="Upload introduction video"
+                hint="MP4, MOV, or WebM — up to 100 MB"
+              />
             </div>
             <div class="field">
-              <label>Catwalk video URL</label>
-              <input name="catwalkVideo" [(ngModel)]="editing.catwalkVideoUrl" placeholder="YouTube, Vimeo, or direct .mp4 URL" />
+              <label>Catwalk video</label>
+              <app-file-upload
+                name="catwalkVideo"
+                [(ngModel)]="editing.catwalkVideoUrl"
+                accept="video"
+                label="Upload catwalk video"
+                hint="MP4, MOV, or WebM — up to 100 MB"
+              />
             </div>
           </div>
 
@@ -599,7 +618,7 @@ import { CategoriesService } from '../../core/categories.service';
   `],
 })
 export class AdminDashboardComponent implements OnInit {
-  tab: 'models' | 'categories' | 'apps' | 'bookings' | 'services' = 'models';
+  tab: 'models' | 'categories' | 'apps' | 'bookings' | 'subscribers' | 'services' = 'models';
   models: Model[] = [];
   categories: ModelCategory[] = [];
   apps: ModelApplication[] = [];
@@ -744,7 +763,7 @@ export class AdminDashboardComponent implements OnInit {
     if (this.editing.id) {
       await this.modelsSvc.update(this.editing);
     } else {
-      this.editing.id = this.slug(this.editing.name);
+      this.editing.id = this.categoriesSvc.slugFromName(this.editing.name);
       if (!this.editing.gallery?.length) this.editing.gallery = [];
       await this.modelsSvc.create(this.editing);
     }
@@ -815,8 +834,4 @@ export class AdminDashboardComponent implements OnInit {
     this.router.navigate(['/']);
   }
 
-  private slug(name: string): string {
-    return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
-      + '-' + Math.random().toString(36).slice(2, 6);
-  }
 }
