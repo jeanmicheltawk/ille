@@ -715,9 +715,12 @@ app.post('/api/admin/upload-video', requireAuth, uploadVideo.single('video'), as
 
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
-    const message = err.code === 'LIMIT_FILE_SIZE'
-      ? 'File is too large. Try a smaller image (max 25 MB).'
-      : err.message;
+    let message = err.message;
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      message = err.field === 'video'
+        ? 'Video is too large. Try a smaller video (max 100 MB).'
+        : 'File is too large. Try a smaller image (max 25 MB).';
+    }
     return res.status(400).json({ error: message });
   }
   if (err) {

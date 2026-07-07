@@ -1,8 +1,9 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CategoriesService } from '../../core/categories.service';
 import { ModelCategory } from '../../core/models.types';
+import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-admin-categories',
@@ -360,8 +361,11 @@ export class AdminCategoriesComponent implements OnInit {
     }
   }
 
+  private toast = inject(ToastService);
+
   private setActionMessage(message: string, kind: 'success' | 'error' = 'success') {
     this.actionMessage = message;
     this.actionKind = kind;
+    this.toast.show(message, kind);
   }
 }

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
@@ -13,6 +13,7 @@ import {
   SubmissionEntry,
 } from '../../core/submission-export.util';
 import { ServiceFormBuilderComponent } from './service-form-builder.component';
+import { ToastService } from '../../shared/toast.service';
 
 interface TypeOption {
   value: ServiceItemType;
@@ -536,7 +537,7 @@ export class AdminServicesComponent implements OnInit {
   }
 
   edit(s: ServiceItem) {
-    this.editing = { ...s, formFields: [...(s.formFields || [])] };
+    this.editing = { ...s, formFields: Array.isArray(s.formFields) ? [...s.formFields] : [] };
     this.step = 1;
     this.error = '';
     this.fieldErrors = {};
@@ -614,7 +615,7 @@ export class AdminServicesComponent implements OnInit {
         this.startNew();
       } else {
         const saved = this.items.find((i) => i.id === this.editing.id);
-        if (saved) this.editing = { ...saved, formFields: [...(saved.formFields || [])] };
+        if (saved) this.editing = { ...saved, formFields: Array.isArray(saved.formFields) ? [...saved.formFields] : [] };
       }
       this.setActionMessage(isNew ? 'Service item created successfully.' : 'Service item updated successfully.');
     } catch (err: unknown) {
@@ -642,7 +643,7 @@ export class AdminServicesComponent implements OnInit {
 
   submissionEntries(sub: ServiceSubmission): SubmissionEntry[] {
     const service = this.items.find((i) => i.id === sub.serviceId);
-    const fields = service?.formFields || [];
+    const fields = Array.isArray(service?.formFields) ? service.formFields : [];
     return Object.entries(sub.data).map(([key, value]) => {
       const field = fields.find((f) => f.id === key);
       const label = field?.label || key.replace(/([A-Z])/g, ' $1').replace(/[-_]/g, ' ');
@@ -679,9 +680,12 @@ export class AdminServicesComponent implements OnInit {
       + '-' + Math.random().toString(36).slice(2, 6);
   }
 
+  private toast = inject(ToastService);
+
   private setActionMessage(message: string, kind: 'success' | 'error' = 'success') {
     this.actionMessage = message;
     this.actionKind = kind;
+    this.toast.show(message, kind);
   }
 
   private getErrorMessage(err: unknown): string {

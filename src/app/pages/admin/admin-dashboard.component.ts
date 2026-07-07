@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
@@ -24,6 +24,7 @@ import { AdminCategoriesComponent } from './admin-categories.component';
 import { AdminSubscribersComponent } from './admin-subscribers.component';
 import { FileUploadComponent } from '../../shared/file-upload.component';
 import { CategoriesService } from '../../core/categories.service';
+import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-admin-dashboard',
@@ -931,9 +932,12 @@ export class AdminDashboardComponent implements OnInit {
     this.router.navigate(['/']);
   }
 
+  private toast = inject(ToastService);
+
   private setActionMessage(message: string, kind: 'success' | 'error' = 'success') {
     this.actionMessage = message;
     this.actionKind = kind;
+    this.toast.show(message, kind);
   }
 
   private getErrorMessage(err: unknown): string {

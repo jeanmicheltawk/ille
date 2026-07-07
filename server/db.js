@@ -73,7 +73,10 @@ function serviceFromRow(row) {
     ...row,
     published: !!row.published,
     formEnabled: !!row.formEnabled,
-    formFields: parseJson(row.formFields, []),
+    formFields: (() => {
+      const parsed = parseJson(row.formFields, []);
+      return Array.isArray(parsed) ? parsed : [];
+    })(),
     backgroundImage: normalizeMediaRef(row.backgroundImage),
   };
 }

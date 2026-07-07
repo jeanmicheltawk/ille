@@ -4,15 +4,17 @@ import { Router, RouterOutlet, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
 import { HeaderComponent } from './shared/header.component';
 import { FooterComponent } from './shared/footer.component';
+import { ToastComponent } from './shared/toast.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [RouterOutlet, HeaderComponent, FooterComponent, CommonModule],
+  imports: [RouterOutlet, HeaderComponent, FooterComponent, CommonModule, ToastComponent],
   template: `
     <app-header />
     <main class="main" [class.main--overlay]="isOverlay"><router-outlet /></main>
     <app-footer *ngIf="!isOverlay" />
+    <app-toast />
   `,
   styles: [`
     .main { padding-top: 80px; min-height: 60vh; }
