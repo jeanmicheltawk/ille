@@ -42,7 +42,7 @@ import { NewsletterService } from '../core/newsletter.service';
 
         <div class="ftr__col ftr__newsletter">
           <div class="ftr__h">Stay updated</div>
-          <p class="ftr__newsletter-desc">New models &amp; agency news</p>
+          <p class="ftr__newsletter-desc">Choose your updates: new models or community news.</p>
           <form class="ftr__form" (ngSubmit)="subscribe()" *ngIf="!subscribed">
             <input
               type="email"
@@ -52,11 +52,16 @@ import { NewsletterService } from '../core/newsletter.service';
               required
               [disabled]="loading"
             />
-            <button type="submit" [disabled]="loading || !email.trim()">
-              {{ loading ? '…' : 'Subscribe' }}
-            </button>
+            <div class="ftr__topic-actions">
+              <button type="button" [disabled]="loading || !email.trim()" (click)="subscribe('models')">
+                {{ loading && pendingTopic === 'models' ? '…' : 'Ille Models' }}
+              </button>
+              <button type="button" [disabled]="loading || !email.trim()" (click)="subscribe('community')">
+                {{ loading && pendingTopic === 'community' ? '…' : 'Join Community' }}
+              </button>
+            </div>
           </form>
-          <p class="ftr__newsletter-ok" *ngIf="subscribed">You're subscribed. Thank you.</p>
+          <p class="ftr__newsletter-ok" *ngIf="subscribed">{{ subscribedMessage }}</p>
           <p class="ftr__newsletter-err" *ngIf="error">{{ error }}</p>
         </div>
       </div>
@@ -117,6 +122,11 @@ import { NewsletterService } from '../core/newsletter.service';
     .ftr__form {
       display: flex;
       flex-direction: column;
+      gap: 8px;
+    }
+    .ftr__topic-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
       gap: 8px;
     }
     .ftr__form input {
@@ -185,23 +195,30 @@ export class FooterComponent {
   email = '';
   loading = false;
   subscribed = false;
+  subscribedMessage = '';
   error = '';
+  pendingTopic: 'models' | 'community' | null = null;
 
   constructor(private newsletter: NewsletterService) {}
 
-  async subscribe() {
+  async subscribe(topic: 'models' | 'community' = 'models') {
     const value = this.email.trim();
     if (!value) return;
     this.loading = true;
+    this.pendingTopic = topic;
     this.error = '';
     try {
-      await this.newsletter.subscribe(value, 'footer');
+      await this.newsletter.subscribe(value, 'footer', topic);
       this.subscribed = true;
+      this.subscribedMessage = topic === 'community'
+        ? "You're subscribed to community updates. Thank you."
+        : "You're subscribed to new Ille Models updates. Thank you.";
       this.email = '';
     } catch {
       this.error = 'Could not subscribe. Please try again.';
     } finally {
       this.loading = false;
+      this.pendingTopic = null;
     }
   }
 }

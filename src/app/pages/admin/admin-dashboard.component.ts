@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { ModelsService } from '../../core/models.service';
@@ -46,6 +47,10 @@ import { CategoriesService } from '../../core/categories.service';
         <button [class.on]="tab==='subscribers'" (click)="setTab('subscribers')">Subscribers</button>
         <button [class.on]="tab==='services'" (click)="setTab('services')">Services</button>
       </nav>
+
+      <p class="action-feedback" *ngIf="actionMessage" [class.action-feedback--error]="actionKind === 'error'">
+        {{ actionMessage }}
+      </p>
 
       <!-- MODELS -->
       <section *ngIf="tab==='models'">
@@ -349,6 +354,19 @@ import { CategoriesService } from '../../core/categories.service';
     }
     .dash__tabs button.on { color: var(--accent); border-color: var(--accent); }
     .dash__tabs button:hover { color: var(--ink); }
+    .action-feedback {
+      margin: 0 0 20px;
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      font-size: 12px;
+      color: var(--ink-soft);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .action-feedback--error {
+      color: var(--error);
+      border-color: rgba(255, 82, 82, 0.5);
+      background: rgba(255, 82, 82, 0.08);
+    }
 
     .models-head {
       display: flex;
@@ -629,6 +647,8 @@ export class AdminDashboardComponent implements OnInit {
   modelModalOpen = false;
   formError = '';
   fieldErrors: Record<string, string> = {};
+  actionMessage = '';
+  actionKind: 'success' | 'error' = 'success';
 
   constructor(
     private modelsSvc: ModelsService,
@@ -760,21 +780,38 @@ export class AdminDashboardComponent implements OnInit {
     if (!this.editing.introVideoUrl?.trim()) this.editing.introVideoUrl = undefined;
     if (!this.editing.catwalkVideoUrl?.trim()) this.editing.catwalkVideoUrl = undefined;
 
-    if (this.editing.id) {
-      await this.modelsSvc.update(this.editing);
-    } else {
-      this.editing.id = this.categoriesSvc.slugFromName(this.editing.name);
-      if (!this.editing.gallery?.length) this.editing.gallery = [];
-      await this.modelsSvc.create(this.editing);
+    const isEdit = !!this.editing.id;
+    const actionLabel = isEdit ? 'save changes to this model' : 'add this model';
+    if (!confirm(`Are you sure you want to ${actionLabel}?`)) return;
+
+    try {
+      if (isEdit) {
+        await this.modelsSvc.update(this.editing);
+      } else {
+        this.editing.id = this.categoriesSvc.slugFromName(this.editing.name);
+        if (!this.editing.gallery?.length) this.editing.gallery = [];
+        await this.modelsSvc.create(this.editing);
+      }
+      this.closeModelModal();
+      await this.refresh();
+      this.setActionMessage(isEdit ? 'Model updated successfully.' : 'Model added successfully.');
+    } catch (err: unknown) {
+      const detail = this.getErrorMessage(err);
+      const base = isEdit ? 'Could not save model changes.' : 'Could not add model.';
+      this.formError = `${base} ${detail}`;
+      this.setActionMessage(`${base} ${detail}`, 'error');
     }
-    this.closeModelModal();
-    await this.refresh();
   }
 
   async del(m: Model) {
-    if (!confirm(`Delete ${m.name}?`)) return;
-    await this.modelsSvc.remove(m.id);
-    await this.refresh();
+    if (!confirm(`Are you sure you want to delete "${m.name}"?`)) return;
+    try {
+      await this.modelsSvc.remove(m.id);
+      await this.refresh();
+      this.setActionMessage('Model deleted successfully.');
+    } catch (err: unknown) {
+      this.setActionMessage(`Could not delete model. ${this.getErrorMessage(err)}`, 'error');
+    }
   }
 
   viewApp(app: ModelApplication) {
@@ -832,6 +869,26 @@ export class AdminDashboardComponent implements OnInit {
   async logout() {
     await this.auth.signOut();
     this.router.navigate(['/']);
+  }
+
+  private setActionMessage(message: string, kind: 'success' | 'error' = 'success') {
+    this.actionMessage = message;
+    this.actionKind = kind;
+  }
+
+  private getErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const payload = err.error;
+      if (typeof payload === 'string' && payload.trim()) return payload.trim();
+      if (payload && typeof payload === 'object') {
+        const msg = (payload as { error?: unknown; message?: unknown }).error
+          ?? (payload as { error?: unknown; message?: unknown }).message;
+        if (typeof msg === 'string' && msg.trim()) return msg.trim();
+      }
+      if (typeof err.message === 'string' && err.message.trim()) return err.message.trim();
+    }
+    if (err instanceof Error && err.message.trim()) return err.message.trim();
+    return 'Please try again.';
   }
 
 }

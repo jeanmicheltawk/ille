@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { NewsletterService } from '../../core/newsletter.service';
+import { NewsletterService, SubscriberTopic } from '../../core/newsletter.service';
 import { EmailSubscriber } from '../../core/models.types';
 
 @Component({
@@ -18,12 +18,20 @@ import { EmailSubscriber } from '../../core/models.types';
             <code>SMTP_*</code> env vars on the server.
           </p>
           <p class="muted" *ngIf="emailConfigured">
-            New published models trigger an automatic email. Use the form below to send a custom message.
+            New published models trigger an automatic email for Ille Models subscribers.
+            Use the filter and form below to send custom messages to each list.
           </p>
         </div>
-        <button type="button" class="btn btn--ghost btn--sm" *ngIf="subscribers.length" (click)="exportCsv()">
-          Export CSV
-        </button>
+        <div class="sub-admin__head-actions">
+          <select [(ngModel)]="topicFilter" name="topicFilter" (ngModelChange)="onTopicChange()">
+            <option value="all">All subscribers</option>
+            <option value="models">Ille Models</option>
+            <option value="community">Community</option>
+          </select>
+          <button type="button" class="btn btn--ghost btn--sm" *ngIf="subscribers.length" (click)="exportCsv()">
+            Export CSV
+          </button>
+        </div>
       </div>
 
       <div class="broadcast" *ngIf="subscribers.length">
@@ -50,15 +58,19 @@ import { EmailSubscriber } from '../../core/models.types';
         <div *ngIf="sendError" class="notice notice--err">{{ sendError }}</div>
       </div>
 
+      <div *ngIf="listNotice" class="notice notice--ok">{{ listNotice }}</div>
+      <div *ngIf="listError" class="notice notice--err">{{ listError }}</div>
+
       <p class="muted" *ngIf="!subscribers.length">No subscribers yet. Visitors can sign up from the site footer.</p>
 
       <table class="tbl" *ngIf="subscribers.length">
         <thead>
-          <tr><th>Email</th><th>Source</th><th>Subscribed</th><th></th></tr>
+          <tr><th>Email</th><th>Topic</th><th>Source</th><th>Subscribed</th><th></th></tr>
         </thead>
         <tbody>
           <tr *ngFor="let s of subscribers">
             <td>{{ s.email }}</td>
+            <td>{{ topicLabel(s.topic) }}</td>
             <td>{{ s.source || '—' }}</td>
             <td>{{ s.subscribedAt || '—' }}</td>
             <td class="row-actions">
@@ -78,6 +90,18 @@ import { EmailSubscriber } from '../../core/models.types';
       margin-bottom: 28px;
     }
     .sub-admin__head h3 { margin: 0 0 8px; font-weight: 300; }
+    .sub-admin__head-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .sub-admin__head-actions select {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--ink);
+      padding: 6px 10px;
+      font-family: inherit;
+    }
     .broadcast {
       margin-bottom: 36px;
       padding: 24px;
@@ -116,12 +140,15 @@ import { EmailSubscriber } from '../../core/models.types';
 })
 export class AdminSubscribersComponent implements OnInit {
   subscribers: EmailSubscriber[] = [];
+  topicFilter: 'all' | SubscriberTopic = 'all';
   emailConfigured = false;
   subject = '';
   message = '';
   sending = false;
   sendResult: { sent: number; skipped: number } | null = null;
   sendError = '';
+  listNotice = '';
+  listError = '';
 
   constructor(private newsletter: NewsletterService) {}
 
@@ -132,13 +159,26 @@ export class AdminSubscribersComponent implements OnInit {
   }
 
   async refresh() {
-    this.subscribers = await this.newsletter.listSubscribers();
+    this.subscribers = await this.newsletter.listSubscribers(
+      this.topicFilter === 'all' ? undefined : this.topicFilter,
+    );
+  }
+
+  async onTopicChange() {
+    await this.refresh();
   }
 
   async remove(s: EmailSubscriber) {
     if (!s.id || !confirm(`Remove ${s.email} from the list?`)) return;
-    await this.newsletter.removeSubscriber(s.id);
-    await this.refresh();
+    this.listNotice = '';
+    this.listError = '';
+    try {
+      await this.newsletter.removeSubscriber(s.id);
+      await this.refresh();
+      this.listNotice = 'Subscriber removed successfully.';
+    } catch (err: unknown) {
+      this.listError = err instanceof Error ? err.message : 'Failed to remove subscriber.';
+    }
   }
 
   async send() {
@@ -148,7 +188,8 @@ export class AdminSubscribersComponent implements OnInit {
     this.sendError = '';
     this.sendResult = null;
     try {
-      const result = await this.newsletter.sendBroadcast(this.subject.trim(), this.message.trim());
+      const topic = this.topicFilter === 'all' ? undefined : this.topicFilter;
+      const result = await this.newsletter.sendBroadcast(this.subject.trim(), this.message.trim(), topic);
       this.sendResult = result;
       this.subject = '';
       this.message = '';
@@ -160,9 +201,9 @@ export class AdminSubscribersComponent implements OnInit {
   }
 
   exportCsv() {
-    const header = 'email,source,subscribedAt\n';
+    const header = 'email,topic,source,subscribedAt\n';
     const rows = this.subscribers.map((s) =>
-      `"${s.email}","${s.source || ''}","${s.subscribedAt || ''}"`,
+      `"${s.email}","${s.topic || ''}","${s.source || ''}","${s.subscribedAt || ''}"`,
     ).join('\n');
     const blob = new Blob([header + rows], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
@@ -171,5 +212,10 @@ export class AdminSubscribersComponent implements OnInit {
     a.download = 'ille-subscribers.csv';
     a.click();
     URL.revokeObjectURL(url);
+  }
+
+  topicLabel(topic?: string) {
+    if (topic === 'community') return 'Community';
+    return 'Ille Models';
   }
 }

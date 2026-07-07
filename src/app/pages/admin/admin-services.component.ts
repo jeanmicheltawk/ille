@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
 import { ServicesService } from '../../core/services.service';
 import { ServiceItem, ServiceItemType, ServiceSubmission } from '../../core/models.types';
@@ -55,6 +56,9 @@ interface TypeOption {
 
         <!-- Editor -->
         <div class="editor-panel">
+          <p class="action-feedback" *ngIf="actionMessage" [class.action-feedback--error]="actionKind === 'error'">
+            {{ actionMessage }}
+          </p>
           <form (ngSubmit)="save()">
             <div class="editor-panel__head">
               <h3>{{ editing.id ? 'Edit: ' + editing.title : 'Create new item' }}</h3>
@@ -259,6 +263,19 @@ interface TypeOption {
     .list-item strong { display: block; font-size: 14px; font-weight: 300; }
     .list-item em { font-size: 12px; color: var(--ink-muted); font-style: normal; }
     .editor-panel { border: 1px solid var(--line); padding: 24px; }
+    .action-feedback {
+      margin: 0 0 16px;
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      font-size: 12px;
+      color: var(--ink-soft);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .action-feedback--error {
+      color: var(--error);
+      border-color: rgba(255, 82, 82, 0.5);
+      background: rgba(255, 82, 82, 0.08);
+    }
     .editor-panel__head {
       display: flex; justify-content: space-between; align-items: center;
       margin-bottom: 20px;
@@ -461,6 +478,8 @@ export class AdminServicesComponent implements OnInit {
   step = 1;
   error = '';
   fieldErrors: Record<string, string> = {};
+  actionMessage = '';
+  actionKind: 'success' | 'error' = 'success';
 
   typeOptions: TypeOption[] = [
     { value: 'events_heading', title: 'Section heading', desc: 'A title that groups content, like "Upcoming Events".', example: 'Upcoming Events' },
@@ -581,26 +600,39 @@ export class AdminServicesComponent implements OnInit {
   async save() {
     if (!this.validate()) return;
     const isNew = !this.editing.id;
-    if (this.editing.id) {
-      await this.services.update(this.editing);
-    } else {
-      this.editing.id = this.slug(this.editing.title);
-      await this.services.create(this.editing);
-    }
-    await this.reload();
-    if (isNew) {
-      this.startNew();
-    } else {
-      const saved = this.items.find((i) => i.id === this.editing.id);
-      if (saved) this.editing = { ...saved, formFields: [...(saved.formFields || [])] };
+    const actionLabel = isNew ? 'create this service item' : 'save changes to this service item';
+    if (!confirm(`Are you sure you want to ${actionLabel}?`)) return;
+    try {
+      if (this.editing.id) {
+        await this.services.update(this.editing);
+      } else {
+        this.editing.id = this.slug(this.editing.title);
+        await this.services.create(this.editing);
+      }
+      await this.reload();
+      if (isNew) {
+        this.startNew();
+      } else {
+        const saved = this.items.find((i) => i.id === this.editing.id);
+        if (saved) this.editing = { ...saved, formFields: [...(saved.formFields || [])] };
+      }
+      this.setActionMessage(isNew ? 'Service item created successfully.' : 'Service item updated successfully.');
+    } catch (err: unknown) {
+      const detail = this.getErrorMessage(err);
+      this.setActionMessage(`Could not ${isNew ? 'create' : 'update'} service item. ${detail}`, 'error');
     }
   }
 
   async remove() {
-    if (!this.editing.id || !confirm(`Delete "${this.editing.title}"?`)) return;
-    await this.services.remove(this.editing.id);
-    this.startNew();
-    await this.reload();
+    if (!this.editing.id || !confirm(`Are you sure you want to delete "${this.editing.title}"?`)) return;
+    try {
+      await this.services.remove(this.editing.id);
+      this.startNew();
+      await this.reload();
+      this.setActionMessage('Service item deleted successfully.');
+    } catch (err: unknown) {
+      this.setActionMessage(`Could not delete service item. ${this.getErrorMessage(err)}`, 'error');
+    }
   }
 
   async reload() {
@@ -645,5 +677,25 @@ export class AdminServicesComponent implements OnInit {
   private slug(name: string): string {
     return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
       + '-' + Math.random().toString(36).slice(2, 6);
+  }
+
+  private setActionMessage(message: string, kind: 'success' | 'error' = 'success') {
+    this.actionMessage = message;
+    this.actionKind = kind;
+  }
+
+  private getErrorMessage(err: unknown): string {
+    if (err instanceof HttpErrorResponse) {
+      const payload = err.error;
+      if (typeof payload === 'string' && payload.trim()) return payload.trim();
+      if (payload && typeof payload === 'object') {
+        const msg = (payload as { error?: unknown; message?: unknown }).error
+          ?? (payload as { error?: unknown; message?: unknown }).message;
+        if (typeof msg === 'string' && msg.trim()) return msg.trim();
+      }
+      if (typeof err.message === 'string' && err.message.trim()) return err.message.trim();
+    }
+    if (err instanceof Error && err.message.trim()) return err.message.trim();
+    return 'Please try again.';
   }
 }

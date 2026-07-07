@@ -69,13 +69,20 @@ async function sendMail({ to, subject, html, text }) {
   return { ok: true };
 }
 
-async function sendWelcome(email, token) {
+async function sendWelcome(email, token, topic = 'models') {
+  const isCommunity = topic === 'community';
   const subject = 'Welcome to ille updates';
   const html = wrapHtml(`
-    <p>Thank you for subscribing to ille model agency updates.</p>
-    <p>You'll hear from us when we add new faces to our roster and when we have news to share.</p>
+    <p>Thank you for subscribing to ille updates.</p>
+    <p>${
+      isCommunity
+        ? "You'll hear from us when we publish new workshops and services."
+        : "You'll hear from us when we add new faces to our roster."
+    }</p>
   `, token);
-  const text = `Thank you for subscribing to ille updates.\n\nYou'll hear from us when we add new models and have news to share.`;
+  const text = isCommunity
+    ? 'Thank you for subscribing to ille updates.\n\nYou\'ll hear from us when we publish new workshops and services.'
+    : 'Thank you for subscribing to ille updates.\n\nYou\'ll hear from us when we add new models to our roster.';
   return sendMail({ to: email, subject, html, text });
 }
 

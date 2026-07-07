@@ -37,6 +37,9 @@ import { ModelCategory } from '../../core/models.types';
         </aside>
 
         <div class="editor-panel">
+          <p class="action-feedback" *ngIf="actionMessage" [class.action-feedback--error]="actionKind === 'error'">
+            {{ actionMessage }}
+          </p>
           <form (ngSubmit)="save()">
             <div class="editor-panel__head">
               <h3>{{ editing.id && !isNew ? 'Edit: ' + editing.name : 'Create category' }}</h3>
@@ -155,6 +158,19 @@ import { ModelCategory } from '../../core/models.types';
       background: var(--black-raised);
       padding: 24px;
     }
+    .action-feedback {
+      margin: 0 0 16px;
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      font-size: 12px;
+      color: var(--ink-soft);
+      background: rgba(255, 255, 255, 0.02);
+    }
+    .action-feedback--error {
+      color: var(--error);
+      border-color: rgba(255, 82, 82, 0.5);
+      background: rgba(255, 82, 82, 0.08);
+    }
     .editor-panel__head {
       display: flex;
       justify-content: space-between;
@@ -230,6 +246,8 @@ export class AdminCategoriesComponent implements OnInit {
   error = '';
   fieldErrors: Record<string, string> = {};
   slugTouched = false;
+  actionMessage = '';
+  actionKind: 'success' | 'error' = 'success';
 
   constructor(private categoriesSvc: CategoriesService) {}
 
@@ -293,6 +311,9 @@ export class AdminCategoriesComponent implements OnInit {
   async save() {
     this.error = '';
     if (!this.validate()) return;
+    const wasNew = this.isNew;
+    const actionLabel = this.isNew ? 'create this category' : 'save changes to this category';
+    if (!confirm(`Are you sure you want to ${actionLabel}?`)) return;
 
     const id = this.categoriesSvc.slugFromName(this.editing.id || this.editing.name);
     if (!id) {
@@ -317,8 +338,10 @@ export class AdminCategoriesComponent implements OnInit {
       const saved = this.categories.find((c) => c.id === id);
       if (saved) this.edit(saved);
       this.isNew = false;
+      this.setActionMessage(wasNew ? 'Category created successfully.' : 'Category updated successfully.');
     } catch (e: unknown) {
       this.error = e instanceof Error ? e.message : 'Could not save category.';
+      this.setActionMessage(this.error, 'error');
     }
   }
 
@@ -330,8 +353,15 @@ export class AdminCategoriesComponent implements OnInit {
       await this.refresh();
       if (this.categories.length) this.edit(this.categories[0]);
       else this.startNew();
+      this.setActionMessage('Category deleted successfully.');
     } catch (e: unknown) {
       this.error = e instanceof Error ? e.message : 'Could not delete — models may still use this category.';
+      this.setActionMessage(this.error, 'error');
     }
+  }
+
+  private setActionMessage(message: string, kind: 'success' | 'error' = 'success') {
+    this.actionMessage = message;
+    this.actionKind = kind;
   }
 }

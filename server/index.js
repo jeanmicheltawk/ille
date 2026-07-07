@@ -60,15 +60,23 @@ app.get('/api/media/:id', async (req, res) => {
 });
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const SUBSCRIBER_TOPICS = new Set(['models', 'community']);
 
-async function activeSubscribers() {
+async function activeSubscribers(topic = null) {
+  if (topic && SUBSCRIBER_TOPICS.has(topic)) {
+    const { rows } = await query(
+      'SELECT * FROM email_subscribers WHERE active = TRUE AND topic = $1',
+      [topic],
+    );
+    return rows;
+  }
   const { rows } = await query('SELECT * FROM email_subscribers WHERE active = TRUE');
   return rows;
 }
 
 function notifyNewModel(model) {
   if (!model.published) return;
-  activeSubscribers().then((subs) => {
+  activeSubscribers('models').then((subs) => {
     if (!subs.length) return;
     email.notifySubscribers(subs, (sub) =>
       email.sendNewModelNotice(sub.email, sub.unsubscribeToken, model),
@@ -472,8 +480,15 @@ app.post('/api/newsletter/subscribe', async (req, res) => {
   if (!EMAIL_RE.test(raw)) {
     return res.status(400).json({ error: 'Please enter a valid email address' });
   }
+  const topic = (req.body?.topic || 'models').toString().trim().toLowerCase();
+  if (!SUBSCRIBER_TOPICS.has(topic)) {
+    return res.status(400).json({ error: 'Invalid subscription topic' });
+  }
   const source = (req.body?.source || 'footer').slice(0, 64);
-  const { rows } = await query('SELECT * FROM email_subscribers WHERE email = $1', [raw]);
+  const { rows } = await query(
+    'SELECT * FROM email_subscribers WHERE email = $1 AND topic = $2',
+    [raw, topic],
+  );
   const existing = rows[0];
 
   if (existing) {
@@ -482,7 +497,7 @@ app.post('/api/newsletter/subscribe', async (req, res) => {
         'UPDATE email_subscribers SET active = TRUE, "subscribedAt" = NOW() WHERE id = $1',
         [existing.id],
       );
-      email.sendWelcome(raw, existing.unsubscribeToken).catch((err) =>
+      email.sendWelcome(raw, existing.unsubscribeToken, topic).catch((err) =>
         console.error('[email] welcome resubscribe failed:', err),
       );
     }
@@ -491,10 +506,10 @@ app.post('/api/newsletter/subscribe', async (req, res) => {
 
   const token = email.generateToken();
   await query(
-    'INSERT INTO email_subscribers (email, "unsubscribeToken", source) VALUES ($1, $2, $3)',
-    [raw, token, source],
+    'INSERT INTO email_subscribers (email, "unsubscribeToken", source, topic) VALUES ($1, $2, $3, $4)',
+    [raw, token, source, topic],
   );
-  email.sendWelcome(raw, token).catch((err) =>
+  email.sendWelcome(raw, token, topic).catch((err) =>
     console.error('[email] welcome failed:', err),
   );
   res.json({ ok: true });
@@ -514,9 +529,18 @@ app.post('/api/newsletter/unsubscribe', async (req, res) => {
 });
 
 app.get('/api/admin/subscribers', requireAuth, async (req, res) => {
-  const { rows } = await query(
-    'SELECT * FROM email_subscribers WHERE active = TRUE ORDER BY "subscribedAt" DESC',
-  );
+  const topic = (req.query?.topic || '').toString().trim().toLowerCase();
+  let rows;
+  if (SUBSCRIBER_TOPICS.has(topic)) {
+    ({ rows } = await query(
+      'SELECT * FROM email_subscribers WHERE active = TRUE AND topic = $1 ORDER BY "subscribedAt" DESC',
+      [topic],
+    ));
+  } else {
+    ({ rows } = await query(
+      'SELECT * FROM email_subscribers WHERE active = TRUE ORDER BY "subscribedAt" DESC',
+    ));
+  }
   res.json(rows.map(subscriberFromRow));
 });
 
@@ -528,10 +552,14 @@ app.delete('/api/admin/subscribers/:id', requireAuth, async (req, res) => {
 app.post('/api/admin/newsletter/send', requireAuth, async (req, res) => {
   const subject = (req.body?.subject || '').trim();
   const message = (req.body?.message || '').trim();
+  const topic = (req.body?.topic || '').toString().trim().toLowerCase();
+  if (topic && !SUBSCRIBER_TOPICS.has(topic)) {
+    return res.status(400).json({ error: 'Invalid subscription topic' });
+  }
   if (!subject) return res.status(400).json({ error: 'Subject is required' });
   if (!message) return res.status(400).json({ error: 'Message is required' });
 
-  const subs = await activeSubscribers();
+  const subs = await activeSubscribers(topic || null);
   if (!subs.length) return res.status(400).json({ error: 'No active subscribers' });
 
   try {

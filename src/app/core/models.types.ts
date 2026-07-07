@@ -132,6 +132,7 @@ export interface ServiceSubmission {
 export interface EmailSubscriber {
   id?: number;
   email: string;
+  topic?: 'models' | 'community';
   active?: boolean;
   source?: string;
   subscribedAt?: string;

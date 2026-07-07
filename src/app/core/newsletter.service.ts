@@ -14,21 +14,24 @@ export interface EmailStatus {
   siteUrl: string;
 }
 
+export type SubscriberTopic = 'models' | 'community';
+
 @Injectable({ providedIn: 'root' })
 export class NewsletterService {
   private mockSubscribers: EmailSubscriber[] = [];
 
   constructor(private api: ApiService) {}
 
-  async subscribe(email: string, source = 'footer'): Promise<void> {
+  async subscribe(email: string, source = 'footer', topic: SubscriberTopic = 'models'): Promise<void> {
     if (this.api.useApi) {
-      await this.api.post('/newsletter/subscribe', { email, source });
+      await this.api.post('/newsletter/subscribe', { email, source, topic });
       return;
     }
     const normalized = email.trim().toLowerCase();
-    if (!this.mockSubscribers.some((s) => s.email === normalized)) {
+    if (!this.mockSubscribers.some((s) => s.email === normalized && s.topic === topic)) {
       this.mockSubscribers.push({
         email: normalized,
+        topic,
         source,
         active: true,
         subscribedAt: new Date().toISOString(),
@@ -47,8 +50,11 @@ export class NewsletterService {
     return { email: 'demo@example.com' };
   }
 
-  async listSubscribers(): Promise<EmailSubscriber[]> {
-    if (this.api.useApi) return this.api.get<EmailSubscriber[]>('/admin/subscribers');
+  async listSubscribers(topic?: SubscriberTopic): Promise<EmailSubscriber[]> {
+    if (this.api.useApi) {
+      const query = topic ? `?topic=${encodeURIComponent(topic)}` : '';
+      return this.api.get<EmailSubscriber[]>(`/admin/subscribers${query}`);
+    }
     return [...this.mockSubscribers];
   }
 
@@ -60,9 +66,13 @@ export class NewsletterService {
     this.mockSubscribers = this.mockSubscribers.filter((s) => s.id !== id);
   }
 
-  async sendBroadcast(subject: string, message: string): Promise<NewsletterSendResult> {
+  async sendBroadcast(
+    subject: string,
+    message: string,
+    topic?: SubscriberTopic,
+  ): Promise<NewsletterSendResult> {
     if (this.api.useApi) {
-      return this.api.post<NewsletterSendResult>('/admin/newsletter/send', { subject, message });
+      return this.api.post<NewsletterSendResult>('/admin/newsletter/send', { subject, message, topic });
     }
     console.info('[mock] broadcast:', subject, message);
     await this.delay(600);

@@ -101,6 +101,7 @@ function subscriberFromRow(row) {
   return {
     id: row.id,
     email: row.email,
+    topic: row.topic || 'models',
     active: !!row.active,
     source: row.source || 'footer',
     subscribedAt: row.subscribedAt,
