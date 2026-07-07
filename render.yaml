@@ -1,5 +1,12 @@
 # Backend API for the GitHub Pages frontend.
 # Deploy: Render dashboard → New → Blueprint → connect jeanmicheltawk/ille
+
+databases:
+  - name: ille-db
+    plan: free
+    databaseName: ille
+    user: ille
+
 services:
   - type: web
     name: ille-api
@@ -10,9 +17,15 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "20"
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ille-db
+          property: connectionString
       - key: JWT_SECRET
         generateValue: true
       - key: ADMIN_EMAIL
         value: admin@ille.co
       - key: ADMIN_PASSWORD
-        value: illeadmin
+        generateValue: true

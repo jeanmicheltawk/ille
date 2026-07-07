@@ -6,6 +6,7 @@ import { DomSanitizer, SafeResourceUrl } from '@angular/platform-browser';
 import { ModelsService } from '../../core/models.service';
 import { Model } from '../../core/models.types';
 import { videoEmbed } from '../../core/video.util';
+import { mediaUrl } from '../../core/media-url.util';
 import { ModelProfileLinksComponent } from './model-profile-links.component';
 
 @Component({
@@ -124,7 +125,7 @@ export class ModelVideoComponent implements OnInit {
     this.loading = true;
     this.model = await this.models.get(id);
     const url = this.kind === 'intro' ? this.model?.introVideoUrl : this.model?.catwalkVideoUrl;
-    this.embed = url ? videoEmbed(url) : null;
+    this.embed = url ? videoEmbed(mediaUrl(url)) : null;
     this.safeSrc =
       this.embed && this.embed.kind !== 'file'
         ? this.sanitizer.bypassSecurityTrustResourceUrl(this.embed.src)

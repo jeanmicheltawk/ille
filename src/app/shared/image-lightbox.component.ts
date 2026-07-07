@@ -1,5 +1,6 @@
 import { Component, EventEmitter, HostListener, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { mediaUrl } from '../core/media-url.util';
 
 @Component({
   selector: 'app-image-lightbox',
@@ -33,7 +34,7 @@ import { CommonModule } from '@angular/common';
       </button>
 
       <figure class="lightbox__frame" (click)="$event.stopPropagation()">
-        <img [src]="images[activeIndex]" [alt]="alt" />
+        <img [src]="resolvedImages[activeIndex]" [alt]="alt" />
         <figcaption *ngIf="images.length > 1" class="lightbox__count">
           {{ activeIndex + 1 }} / {{ images.length }}
         </figcaption>
@@ -154,6 +155,10 @@ export class ImageLightboxComponent {
 
   get canNext(): boolean {
     return this.images.length > 1 && this.activeIndex < this.images.length - 1;
+  }
+
+  get resolvedImages(): string[] {
+    return this.images.map((src) => mediaUrl(src));
   }
 
   @HostListener('document:keydown', ['$event'])

@@ -5,6 +5,7 @@ import { ModelsService } from '../../core/models.service';
 import { CategoriesService } from '../../core/categories.service';
 import { modelStats, normalizeModelCategory } from '../../core/model.util';
 import { Model, ModelCategory, ModelsBranch } from '../../core/models.types';
+import { MediaUrlPipe } from '../../shared/media-url.pipe';
 import {
   isBranchCategory,
   isBranchTab,
@@ -16,7 +17,7 @@ import {
 @Component({
   selector: 'app-models',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, MediaUrlPipe],
   template: `
     <div class="page-head">
       <p class="eyebrow">ille</p>
@@ -43,7 +44,7 @@ import {
       <div class="grid" *ngIf="!loading">
         <a *ngFor="let m of visible; let i = index" [routerLink]="['/model', m.id]"
            class="card rise" [style.animation-delay]="(i * 0.06) + 's'">
-          <div class="card__img" [style.background-image]="'url(' + m.coverImage + ')'">
+          <div class="card__img" [style.background-image]="'url(' + (m.coverImage | mediaUrl) + ')'">
             <span *ngIf="m.outOfTown" class="card__badge">Out of town</span>
             <ng-container *ngIf="modelStats(m) as stats">
               <div class="card__stats" *ngIf="stats.length">

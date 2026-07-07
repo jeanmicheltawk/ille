@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ServicesService } from '../../core/services.service';
 import { ServiceFormField, ServiceItem } from '../../core/models.types';
+import { mediaUrl } from '../../core/media-url.util';
 
 @Component({
   selector: 'app-service-book',
@@ -248,7 +249,7 @@ export class ServiceBookComponent implements OnInit {
   constructor(private route: ActivatedRoute, private services: ServicesService) {}
 
   get bgStyle(): string {
-    const url = this.service?.backgroundImage || 'assets/home-bg.webp';
+    const url = mediaUrl(this.service?.backgroundImage) || 'assets/home-bg.webp';
     return `url(${url})`;
   }
 

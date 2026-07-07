@@ -2,6 +2,7 @@ import { Component, forwardRef, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { UploadService } from '../core/upload.service';
+import { mediaUrl } from '../core/media-url.util';
 
 export type FileUploadAccept = 'image' | 'pdf' | 'video';
 
@@ -172,7 +173,7 @@ export class FileUploadComponent implements ControlValueAccessor {
 
   get previewItems(): { url: string; name: string }[] {
     return this.previewUrls.map((url) => ({
-      url,
+      url: mediaUrl(url),
       name: this.labels.get(url) ?? this.nameFromUrl(url),
     }));
   }

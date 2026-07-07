@@ -6,11 +6,12 @@ import { Model } from '../../core/models.types';
 import { modelStats, ModelStat } from '../../core/model.util';
 import { modelsBackLink } from '../../core/models-branch.util';
 import { ImageLightboxComponent } from '../../shared/image-lightbox.component';
+import { MediaUrlPipe } from '../../shared/media-url.pipe';
 
 @Component({
   selector: 'app-model-digitals',
   standalone: true,
-  imports: [CommonModule, RouterLink, ImageLightboxComponent],
+  imports: [CommonModule, RouterLink, ImageLightboxComponent, MediaUrlPipe],
   template: `
     <div class="model-page" *ngIf="model">
       <div class="digitals-wrap">
@@ -32,7 +33,7 @@ import { ImageLightboxComponent } from '../../shared/image-lightbox.component';
             (click)="openLightbox(i)"
             [attr.aria-label]="'View digital ' + (i + 1)"
           >
-            <img [src]="src" [alt]="model.name + ' digital'" />
+            <img [src]="src | mediaUrl" [alt]="model.name + ' digital'" />
           </button>
         </div>
 

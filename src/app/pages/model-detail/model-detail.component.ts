@@ -7,11 +7,12 @@ import { modelStats, ModelStat } from '../../core/model.util';
 import { modelsBackLink } from '../../core/models-branch.util';
 import { ModelProfileLinksComponent } from './model-profile-links.component';
 import { ImageLightboxComponent } from '../../shared/image-lightbox.component';
+import { MediaUrlPipe } from '../../shared/media-url.pipe';
 
 @Component({
   selector: 'app-model-detail',
   standalone: true,
-  imports: [CommonModule, RouterLink, ModelProfileLinksComponent, ImageLightboxComponent],
+  imports: [CommonModule, RouterLink, ModelProfileLinksComponent, ImageLightboxComponent, MediaUrlPipe],
   template: `
     <div class="model-page" *ngIf="model">
       <div class="container profile">
@@ -44,7 +45,7 @@ import { ImageLightboxComponent } from '../../shared/image-lightbox.component';
 
         <div class="profile__image">
           <button type="button" class="image-btn" (click)="openLightbox(0)" aria-label="View cover image">
-            <img [src]="model.coverImage" [alt]="model.name" />
+            <img [src]="model.coverImage | mediaUrl" [alt]="model.name" />
           </button>
         </div>
       </div>
@@ -57,7 +58,7 @@ import { ImageLightboxComponent } from '../../shared/image-lightbox.component';
           (click)="openLightbox(i + 1)"
           [attr.aria-label]="'View image ' + (i + 2)"
         >
-          <img [src]="src" [alt]="model.name" />
+          <img [src]="src | mediaUrl" [alt]="model.name" />
         </button>
       </div>
     </div>

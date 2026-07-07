@@ -3,15 +3,16 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { Model } from '../../core/models.types';
 import { modelDigitalsPath } from '../../core/model.util';
+import { MediaUrlPipe } from '../../shared/media-url.pipe';
 
 @Component({
   selector: 'app-model-profile-links',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, MediaUrlPipe],
   template: `
     <nav class="profile-links" *ngIf="hasLinks">
       <a *ngIf="model.digitals?.length" [routerLink]="digitalsLink">Digitals</a>
-      <a *ngIf="model.pdfUrl" [href]="model.pdfUrl" download target="_blank" rel="noopener noreferrer">
+      <a *ngIf="model.pdfUrl" [href]="model.pdfUrl | mediaUrl" download target="_blank" rel="noopener noreferrer">
         Download PDF
       </a>
       <a *ngIf="model.introVideoUrl" [routerLink]="['/model', model.id, 'intro-video']">

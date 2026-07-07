@@ -1,165 +1,42 @@
-// db.js — SQLite database: schema, seed data, and row<->object helpers.
-// SQLite is just a single file (ille.db) created next to this script.
+// db.js — PostgreSQL: schema migration, seed data, and row<->object helpers.
 
-const Database = require('better-sqlite3');
-const bcrypt = require('bcryptjs');
+const fs = require('fs');
 const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+const { Pool } = require('pg');
+const bcrypt = require('bcryptjs');
+const { normalizeMediaRef, normalizeMediaRefList, migrateRefToDb, migrateRefListToDb } = require('./media');
 
-const db = new Database(path.join(__dirname, 'ille.db'));
-db.pragma('journal_mode = WAL');
-
-// ---- schema -------------------------------------------------
-db.exec(`
-  CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE NOT NULL,
-    passwordHash TEXT NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS models (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    category TEXT NOT NULL,
-    height INTEGER,
-    bust INTEGER,
-    waist INTEGER,
-    hips INTEGER,
-    shoeSize INTEGER,
-    hair TEXT,
-    eyes TEXT,
-    city TEXT,
-    outOfTown INTEGER NOT NULL DEFAULT 0,
-    instagram TEXT,
-    coverImage TEXT NOT NULL,
-    gallery TEXT NOT NULL DEFAULT '[]',
-    published INTEGER NOT NULL DEFAULT 1,
-    createdAt TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS applications (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    firstName TEXT NOT NULL,
-    lastName TEXT,
-    dateOfBirth TEXT,
-    email TEXT NOT NULL,
-    phone TEXT,
-    instagram TEXT,
-    height INTEGER,
-    fullShotUrl TEXT,
-    halfShotUrl TEXT,
-    closeupShotUrl TEXT,
-    profileShotUrl TEXT,
-    createdAt TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS bookings (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    modelId TEXT,
-    clientName TEXT NOT NULL,
-    company TEXT,
-    email TEXT NOT NULL,
-    phone TEXT,
-    jobType TEXT,
-    dates TEXT,
-    location TEXT,
-    budget TEXT,
-    message TEXT,
-    createdAt TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS service_items (
-    id TEXT PRIMARY KEY,
-    type TEXT NOT NULL,
-    title TEXT NOT NULL,
-    subtitle TEXT,
-    badge TEXT,
-    description TEXT,
-    ctaLabel TEXT,
-    ctaUrl TEXT,
-    sortOrder INTEGER NOT NULL DEFAULT 0,
-    published INTEGER NOT NULL DEFAULT 1,
-    formEnabled INTEGER NOT NULL DEFAULT 0,
-    formTitle TEXT,
-    backgroundImage TEXT,
-    formFields TEXT NOT NULL DEFAULT '[]'
-  );
-
-  CREATE TABLE IF NOT EXISTS service_submissions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    serviceId TEXT NOT NULL,
-    serviceTitle TEXT NOT NULL,
-    data TEXT NOT NULL,
-    createdAt TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-
-  CREATE TABLE IF NOT EXISTS model_categories (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    sortOrder INTEGER NOT NULL DEFAULT 0,
-    imageUrl TEXT,
-    published INTEGER NOT NULL DEFAULT 1
-  );
-
-  CREATE TABLE IF NOT EXISTS email_subscribers (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    email TEXT UNIQUE NOT NULL,
-    unsubscribeToken TEXT UNIQUE NOT NULL,
-    active INTEGER NOT NULL DEFAULT 1,
-    source TEXT DEFAULT 'footer',
-    subscribedAt TEXT NOT NULL DEFAULT (datetime('now'))
-  );
-`);
-
-function ensureColumn(table, column, ddl) {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
-  if (!cols.some((c) => c.name === column)) db.exec(ddl);
-}
-
-ensureColumn('service_items', 'formEnabled', 'ALTER TABLE service_items ADD COLUMN formEnabled INTEGER NOT NULL DEFAULT 0');
-ensureColumn('service_items', 'formTitle', 'ALTER TABLE service_items ADD COLUMN formTitle TEXT');
-ensureColumn('service_items', 'backgroundImage', 'ALTER TABLE service_items ADD COLUMN backgroundImage TEXT');
-ensureColumn('service_items', 'formFields', `ALTER TABLE service_items ADD COLUMN formFields TEXT NOT NULL DEFAULT '[]'`);
-ensureColumn('models', 'digitals', `ALTER TABLE models ADD COLUMN digitals TEXT NOT NULL DEFAULT '[]'`);
-ensureColumn('models', 'pdfUrl', 'ALTER TABLE models ADD COLUMN pdfUrl TEXT');
-ensureColumn('models', 'introVideoUrl', 'ALTER TABLE models ADD COLUMN introVideoUrl TEXT');
-ensureColumn('models', 'catwalkVideoUrl', 'ALTER TABLE models ADD COLUMN catwalkVideoUrl TEXT');
-ensureColumn('models', 'branch', `ALTER TABLE models ADD COLUMN branch TEXT NOT NULL DEFAULT 'women'`);
-
-// Legacy rows stored men/women in category — split into branch + sub-category.
-db.prepare(`UPDATE models SET branch = 'men', category = '' WHERE category = 'men'`).run();
-db.prepare(`UPDATE models SET branch = 'women', category = '' WHERE category = 'women'`).run();
-
-// ---- seed the admin user -----------------------------------
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@ille.co';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'illeadmin';
 
-const existingAdmin = db.prepare('SELECT id FROM users WHERE email = ?').get(ADMIN_EMAIL);
-if (!existingAdmin) {
-  const hash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
-  db.prepare('INSERT INTO users (email, passwordHash) VALUES (?, ?)').run(ADMIN_EMAIL, hash);
-  console.log(`Seeded admin login -> ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error('DATABASE_URL is required (see server/.env.example)');
 }
 
-// ---- seed model categories (only if table is empty) --------
-const categoryCount = db.prepare('SELECT COUNT(*) AS c FROM model_categories').get().c;
-if (categoryCount === 0) {
-  const seedCategories = [
-    ['women', 'Women', 0, 1],
-    // ['new-faces', 'New Faces', 1, 1],
-    ['men', 'Men', 2, 1],
-  ];
-  const insertCategory = db.prepare(`
-    INSERT INTO model_categories (id, name, sortOrder, published)
-    VALUES (?, ?, ?, ?)
-  `);
-  const txCategories = db.transaction(() => {
-    for (const row of seedCategories) insertCategory.run(...row);
-  });
-  txCategories();
-  console.log(`Seeded ${seedCategories.length} model categories.`);
+const useSsl =
+  process.env.NODE_ENV === 'production' || databaseUrl.includes('render.com');
+
+const pool = new Pool({
+  connectionString: databaseUrl,
+  ssl: useSsl ? { rejectUnauthorized: false } : false,
+});
+
+async function query(text, params = []) {
+  return pool.query(text, params);
 }
 
-// ---- mappers ------------------------------------------------
+function parseJson(value, fallback) {
+  if (value == null) return fallback;
+  if (typeof value === 'object') return value;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+
 function modelFromRow(row) {
   if (!row) return null;
   let branch = row.branch;
@@ -181,8 +58,12 @@ function modelFromRow(row) {
     category,
     outOfTown: !!row.outOfTown,
     published: !!row.published,
-    gallery: JSON.parse(row.gallery || '[]'),
-    digitals: JSON.parse(row.digitals || '[]'),
+    coverImage: normalizeMediaRef(row.coverImage),
+    gallery: normalizeMediaRefList(parseJson(row.gallery, [])),
+    digitals: normalizeMediaRefList(parseJson(row.digitals, [])),
+    pdfUrl: normalizeMediaRef(row.pdfUrl),
+    introVideoUrl: normalizeMediaRef(row.introVideoUrl),
+    catwalkVideoUrl: normalizeMediaRef(row.catwalkVideoUrl),
   };
 }
 
@@ -192,7 +73,8 @@ function serviceFromRow(row) {
     ...row,
     published: !!row.published,
     formEnabled: !!row.formEnabled,
-    formFields: JSON.parse(row.formFields || '[]'),
+    formFields: parseJson(row.formFields, []),
+    backgroundImage: normalizeMediaRef(row.backgroundImage),
   };
 }
 
@@ -200,7 +82,7 @@ function submissionFromRow(row) {
   if (!row) return null;
   return {
     ...row,
-    data: JSON.parse(row.data || '{}'),
+    data: parseJson(row.data, {}),
   };
 }
 
@@ -225,27 +107,155 @@ function subscriberFromRow(row) {
   };
 }
 
-// ---- seed service items (only if table is empty) -----------
-const serviceCount = db.prepare('SELECT COUNT(*) AS c FROM service_items').get().c;
-if (serviceCount === 0) {
-  const seedServices = [
-    ['heading-events', 'events_heading', 'Upcoming Events', null, null, null, null, null, 0, 1, 0, null, null, '[]'],
-    ['model-camp', 'program', 'Model Camp', 'model edition', 'Soon', null, null, null, 1, 1, 0, null, null, '[]'],
-    ['heading-services', 'services_heading', 'Discover our services', null, null, null, null, null, 2, 1, 0, null, null, '[]'],
+async function seedAdmin(client) {
+  const { rows } = await client.query('SELECT id FROM users WHERE email = $1', [ADMIN_EMAIL]);
+  if (rows.length) return;
+  const hash = bcrypt.hashSync(ADMIN_PASSWORD, 10);
+  await client.query(
+    'INSERT INTO users (email, "passwordHash") VALUES ($1, $2)',
+    [ADMIN_EMAIL, hash],
+  );
+  console.log(`Seeded admin login -> ${ADMIN_EMAIL} / ${ADMIN_PASSWORD}`);
+}
+
+async function seedCategories(client) {
+  const { rows } = await client.query('SELECT COUNT(*)::int AS c FROM model_categories');
+  if (rows[0].c > 0) return;
+
+  const seedCategories = [
+    ['women', 'Women', 0, true],
+    ['men', 'Men', 2, true],
   ];
-  const insertService = db.prepare(`
-    INSERT INTO service_items (id, type, title, subtitle, badge, description, ctaLabel, ctaUrl, sortOrder, published, formEnabled, formTitle, backgroundImage, formFields)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const txServices = db.transaction(() => {
-    for (const row of seedServices) insertService.run(...row);
-  });
-  txServices();
+  for (const [id, name, sortOrder, published] of seedCategories) {
+    await client.query(
+      'INSERT INTO model_categories (id, name, "sortOrder", published) VALUES ($1, $2, $3, $4)',
+      [id, name, sortOrder, published],
+    );
+  }
+  console.log(`Seeded ${seedCategories.length} model categories.`);
+}
+
+async function seedServices(client) {
+  const { rows } = await client.query('SELECT COUNT(*)::int AS c FROM service_items');
+  if (rows[0].c > 0) return;
+
+  const seedServices = [
+    ['heading-events', 'events_heading', 'Upcoming Events', null, null, null, null, null, 0, true, false, null, null, '[]'],
+    ['model-camp', 'program', 'Model Camp', 'model edition', 'Soon', null, null, null, 1, true, false, null, null, '[]'],
+    ['heading-services', 'services_heading', 'Discover our services', null, null, null, null, null, 2, true, false, null, null, '[]'],
+  ];
+  for (const row of seedServices) {
+    await client.query(
+      `INSERT INTO service_items (id, type, title, subtitle, badge, description, "ctaLabel", "ctaUrl",
+        "sortOrder", published, "formEnabled", "formTitle", "backgroundImage", "formFields")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+      row,
+    );
+  }
   console.log(`Seeded ${seedServices.length} service items.`);
 }
 
+async function migrateLegacyMedia(client) {
+  const uploadsDir = path.join(__dirname, 'uploads');
+  const queryFn = (text, params) => client.query(text, params);
+  let updated = 0;
+
+  const { rows: models } = await client.query(
+    'SELECT id, "coverImage", gallery, digitals, "pdfUrl", "introVideoUrl", "catwalkVideoUrl" FROM models',
+  );
+  for (const row of models) {
+    const coverImage = await migrateRefToDb(queryFn, uploadsDir, row.coverImage);
+    const gallery = await migrateRefListToDb(queryFn, uploadsDir, parseJson(row.gallery, []));
+    const digitals = await migrateRefListToDb(queryFn, uploadsDir, parseJson(row.digitals, []));
+    const pdfUrl = await migrateRefToDb(queryFn, uploadsDir, row.pdfUrl);
+    const introVideoUrl = await migrateRefToDb(queryFn, uploadsDir, row.introVideoUrl);
+    const catwalkVideoUrl = await migrateRefToDb(queryFn, uploadsDir, row.catwalkVideoUrl);
+    const changed =
+      row.coverImage !== coverImage ||
+      JSON.stringify(parseJson(row.gallery, [])) !== JSON.stringify(gallery) ||
+      JSON.stringify(parseJson(row.digitals, [])) !== JSON.stringify(digitals) ||
+      row.pdfUrl !== pdfUrl ||
+      row.introVideoUrl !== introVideoUrl ||
+      row.catwalkVideoUrl !== catwalkVideoUrl;
+    if (!changed) continue;
+    await client.query(
+      `UPDATE models SET "coverImage"=$2, gallery=$3, digitals=$4,
+        "pdfUrl"=$5, "introVideoUrl"=$6, "catwalkVideoUrl"=$7 WHERE id=$1`,
+      [
+        row.id,
+        coverImage,
+        JSON.stringify(gallery),
+        JSON.stringify(digitals),
+        pdfUrl,
+        introVideoUrl,
+        catwalkVideoUrl,
+      ],
+    );
+    updated++;
+  }
+
+  const { rows: services } = await client.query(
+    'SELECT id, "backgroundImage" FROM service_items WHERE "backgroundImage" IS NOT NULL',
+  );
+  for (const row of services) {
+    const bg = await migrateRefToDb(queryFn, uploadsDir, row.backgroundImage);
+    if (bg === row.backgroundImage) continue;
+    await client.query('UPDATE service_items SET "backgroundImage"=$2 WHERE id=$1', [row.id, bg]);
+    updated++;
+  }
+
+  const shotCols = ['fullShotUrl', 'halfShotUrl', 'closeupShotUrl', 'profileShotUrl'];
+  const { rows: apps } = await client.query(
+    `SELECT id, ${shotCols.map((c) => `"${c}"`).join(', ')} FROM applications`,
+  );
+  for (const row of apps) {
+    const updates = {};
+    for (const col of shotCols) {
+      const next = await migrateRefToDb(queryFn, uploadsDir, row[col]);
+      if (next !== row[col]) updates[col] = next;
+    }
+    if (!Object.keys(updates).length) continue;
+    const sets = Object.keys(updates).map((col, i) => `"${col}"=$${i + 2}`).join(', ');
+    await client.query(
+      `UPDATE applications SET ${sets} WHERE id=$1`,
+      [row.id, ...Object.values(updates)],
+    );
+    updated++;
+  }
+
+  if (updated) {
+    console.log(`Migrated legacy file paths into database media (${updated} record(s)).`);
+  }
+}
+
+async function initDb() {
+  const migrationsDir = path.join(__dirname, 'migrations');
+  const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
+  for (const file of files) {
+    const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf8');
+    await query(sql);
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await seedAdmin(client);
+    await seedCategories(client);
+    await seedServices(client);
+    await migrateLegacyMedia(client);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
-  db,
+  pool,
+  query,
+  initDb,
   modelFromRow,
   serviceFromRow,
   submissionFromRow,

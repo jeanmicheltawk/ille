@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ServiceFormField, ServiceItem } from '../../core/models.types';
 import { ServicesService } from '../../core/services.service';
+import { mediaUrl } from '../../core/media-url.util';
 import { FileUploadComponent } from '../../shared/file-upload.component';
 
 interface FieldTypeOption {
@@ -349,7 +350,7 @@ export class ServiceFormBuilderComponent {
   }
 
   get previewBg(): string {
-    const url = this.service.backgroundImage || 'assets/home-bg.webp';
+    const url = mediaUrl(this.service.backgroundImage) || 'assets/home-bg.webp';
     return `url(${url})`;
   }
 
