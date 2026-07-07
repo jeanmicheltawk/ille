@@ -21,10 +21,39 @@ const useSsl =
 const pool = new Pool({
   connectionString: databaseUrl,
   ssl: useSsl ? { rejectUnauthorized: false } : false,
+  keepAlive: true,
+  connectionTimeoutMillis: 15000,
+  idleTimeoutMillis: 30000,
+  // Large media inserts (videos) can be slow; allow generous per-statement time.
+  statement_timeout: 120000,
 });
 
+// Prevents a dropped idle connection from crashing the whole process.
+pool.on('error', (err) => {
+  console.error('Unexpected PostgreSQL pool error (idle client):', err.message);
+});
+
+function isConnectionDropError(err) {
+  const msg = String(err && err.message).toLowerCase();
+  return (
+    msg.includes('connection terminated') ||
+    msg.includes('connection reset') ||
+    err?.code === 'ECONNRESET' ||
+    err?.code === '57P01' // admin_shutdown
+  );
+}
+
 async function query(text, params = []) {
-  return pool.query(text, params);
+  try {
+    return await pool.query(text, params);
+  } catch (err) {
+    // A single transparent retry covers a stale/dropped pooled connection.
+    if (isConnectionDropError(err)) {
+      console.warn('DB connection dropped mid-query — retrying once:', err.message);
+      return pool.query(text, params);
+    }
+    throw err;
+  }
 }
 
 function parseJson(value, fallback) {
