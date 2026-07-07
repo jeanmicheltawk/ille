@@ -23,6 +23,8 @@ const {
   normalizeMediaRefList,
   storeFile,
   fetchMedia,
+  collectMediaIds,
+  deleteUnreferencedMedia,
 } = require('./media');
 
 const app = express();
@@ -125,6 +127,96 @@ function normalizeUrlArray(value) {
   return [];
 }
 
+/** All media IDs a model row references (cover, gallery, digitals, pdf, videos). */
+function modelMediaIds(row) {
+  if (!row) return [];
+  return collectMediaIds(
+    row.coverImage,
+    row.gallery,
+    row.digitals,
+    row.pdfUrl,
+    row.introVideoUrl,
+    row.catwalkVideoUrl,
+  );
+}
+
+/**
+ * Best-effort: remove media files that are no longer referenced anywhere.
+ * Runs after the model has been saved/deleted, so kept refs are protected by
+ * the reference check. Never throws into the request path.
+ */
+async function reclaimMedia(candidateIds) {
+  if (!candidateIds || !candidateIds.length) return;
+  try {
+    const deleted = await deleteUnreferencedMedia(query, candidateIds);
+    if (deleted) console.log(`Freed ${deleted} orphaned media file(s).`);
+  } catch (err) {
+    console.error('Media cleanup failed:', err);
+  }
+}
+
+// ============================================================
+// TWIN MODEL EXTRAS
+// Stored in a separate `model_extras` table so we never need to ALTER the
+// (possibly non-owned) `models` table. Merged into model objects on read.
+// ============================================================
+const TWIN_FIELDS = [
+  'twinName1', 'twinName2', 'instagram2',
+  'height2', 'bust2', 'waist2', 'hips2', 'shoeSize2', 'hair2', 'eyes2',
+];
+
+function twinDataFromModel(m) {
+  if (!m || !m.isTwin) return null;
+  const data = { isTwin: true };
+  for (const field of TWIN_FIELDS) data[field] = m[field] ?? null;
+  return data;
+}
+
+/** Upsert (or clear) the twin extras row for a model. */
+async function saveModelExtras(m) {
+  const data = twinDataFromModel(m);
+  if (!data) {
+    await query('DELETE FROM model_extras WHERE model_id = $1', [m.id]);
+    return;
+  }
+  await query(
+    `INSERT INTO model_extras (model_id, data) VALUES ($1, $2)
+     ON CONFLICT (model_id) DO UPDATE SET data = EXCLUDED.data`,
+    [m.id, JSON.stringify(data)],
+  );
+}
+
+async function loadModelExtras(ids) {
+  const map = new Map();
+  if (!ids.length) return map;
+  const { rows } = await query(
+    'SELECT model_id, data FROM model_extras WHERE model_id = ANY($1)',
+    [ids],
+  );
+  for (const row of rows) {
+    const data = typeof row.data === 'string' ? JSON.parse(row.data) : row.data;
+    map.set(row.model_id, data || {});
+  }
+  return map;
+}
+
+function applyExtras(model, data) {
+  if (!model) return model;
+  if (!data || !data.isTwin) return { ...model, isTwin: false };
+  const merged = { ...model, isTwin: true };
+  for (const field of TWIN_FIELDS) merged[field] = data[field] ?? null;
+  return merged;
+}
+
+/** Attach twin extras to a single model or array of models. */
+async function attachExtras(models) {
+  const list = Array.isArray(models) ? models : [models];
+  const ids = list.filter(Boolean).map((m) => m.id);
+  const map = await loadModelExtras(ids);
+  const out = list.map((m) => (m ? applyExtras(m, map.get(m.id)) : m));
+  return Array.isArray(models) ? out : out[0];
+}
+
 // ============================================================
 // AUTH
 // ============================================================
@@ -160,7 +252,7 @@ app.get('/api/models', async (req, res) => {
   }
   sql += ' ORDER BY name';
   const { rows } = await query(sql, params);
-  res.json(rows.map(modelFromRow));
+  res.json(await attachExtras(rows.map(modelFromRow)));
 });
 
 app.get('/api/models/digitals/:path', async (req, res) => {
@@ -174,14 +266,14 @@ app.get('/api/models/digitals/:path', async (req, res) => {
     .map(modelFromRow)
     .find((m) => digitalsNameSlug(m.name) === nameSlug);
   if (!model) return res.status(404).json({ error: 'Not found' });
-  res.json(model);
+  res.json(await attachExtras(model));
 });
 
 app.get('/api/models/:id', async (req, res) => {
   const { rows } = await query('SELECT * FROM models WHERE id = $1', [req.params.id]);
   const row = rows[0];
   if (!row) return res.status(404).json({ error: 'Not found' });
-  res.json(modelFromRow(row));
+  res.json(await attachExtras(modelFromRow(row)));
 });
 
 // ============================================================
@@ -199,7 +291,7 @@ app.get('/api/categories', async (req, res) => {
 // ============================================================
 app.get('/api/admin/models', requireAuth, async (req, res) => {
   const { rows } = await query('SELECT * FROM models ORDER BY name');
-  res.json(rows.map(modelFromRow));
+  res.json(await attachExtras(rows.map(modelFromRow)));
 });
 
 app.post('/api/admin/models', requireAuth, async (req, res) => {
@@ -216,6 +308,7 @@ app.post('/api/admin/models', requireAuth, async (req, res) => {
       s.hair, s.eyes, s.city, s.outOfTown, s.instagram, s.coverImage, s.gallery, s.digitals,
       s.pdfUrl, s.introVideoUrl, s.catwalkVideoUrl, s.published,
     ]);
+    await saveModelExtras({ ...m, id: s.id });
     res.json({ ok: true });
     notifyNewModel(m);
   } catch (err) {
@@ -226,8 +319,9 @@ app.post('/api/admin/models', requireAuth, async (req, res) => {
 
 app.put('/api/admin/models/:id', requireAuth, async (req, res) => {
   try {
-    const { rows: prevRows } = await query('SELECT published FROM models WHERE id = $1', [req.params.id]);
+    const { rows: prevRows } = await query('SELECT * FROM models WHERE id = $1', [req.params.id]);
     const prev = prevRows[0];
+    const oldMediaIds = modelMediaIds(prev);
     const m = { ...req.body, id: req.params.id };
     const s = serializeModel(m);
     await query(`
@@ -243,8 +337,10 @@ app.put('/api/admin/models/:id', requireAuth, async (req, res) => {
       s.hair, s.eyes, s.city, s.outOfTown, s.instagram, s.coverImage, s.gallery, s.digitals,
       s.pdfUrl, s.introVideoUrl, s.catwalkVideoUrl, s.published, s.id,
     ]);
+    await saveModelExtras(m);
     res.json({ ok: true });
     if (m.published && !prev?.published) notifyNewModel(m);
+    reclaimMedia(oldMediaIds);
   } catch (err) {
     console.error('PUT /api/admin/models failed:', err);
     res.status(500).json({ error: err.message || 'Failed to save model' });
@@ -252,8 +348,17 @@ app.put('/api/admin/models/:id', requireAuth, async (req, res) => {
 });
 
 app.delete('/api/admin/models/:id', requireAuth, async (req, res) => {
-  await query('DELETE FROM models WHERE id = $1', [req.params.id]);
-  res.json({ ok: true });
+  try {
+    const { rows } = await query('SELECT * FROM models WHERE id = $1', [req.params.id]);
+    const mediaIds = modelMediaIds(rows[0]);
+    await query('DELETE FROM models WHERE id = $1', [req.params.id]);
+    await query('DELETE FROM model_extras WHERE model_id = $1', [req.params.id]);
+    res.json({ ok: true });
+    reclaimMedia(mediaIds);
+  } catch (err) {
+    console.error('DELETE /api/admin/models failed:', err);
+    res.status(500).json({ error: err.message || 'Failed to delete model' });
+  }
 });
 
 // ============================================================
@@ -594,6 +699,20 @@ app.post('/api/admin/upload-file', requireAuth, upload.single('file'), async (re
   } catch (err) {
     console.error('Upload failed:', err);
     res.status(500).json({ error: err.message || 'Upload failed' });
+  }
+});
+
+// One-time / occasional sweep: delete media rows not referenced by anything.
+// Safe — each candidate is re-checked for references before deletion.
+app.post('/api/admin/media/cleanup-orphans', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await query('SELECT id FROM media_files');
+    const ids = rows.map((r) => r.id);
+    const deleted = await deleteUnreferencedMedia(query, ids);
+    res.json({ ok: true, scanned: ids.length, deleted });
+  } catch (err) {
+    console.error('Orphan media cleanup failed:', err);
+    res.status(500).json({ error: err.message || 'Cleanup failed' });
   }
 });
 

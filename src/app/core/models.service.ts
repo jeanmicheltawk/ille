@@ -78,4 +78,15 @@ export class ModelsService {
   uploadFile(file: File): Promise<string> {
     return this.upload.upload(file);
   }
+
+  /** Delete media files no longer referenced by any model/service/application. */
+  async cleanupOrphanMedia(): Promise<{ scanned: number; deleted: number }> {
+    if (this.api.useApi) {
+      return this.api.post<{ scanned: number; deleted: number }>(
+        '/admin/media/cleanup-orphans',
+        {},
+      );
+    }
+    return { scanned: 0, deleted: 0 };
+  }
 }

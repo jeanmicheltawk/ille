@@ -8,6 +8,11 @@ import { modelsBackLink } from '../../core/models-branch.util';
 import { ImageLightboxComponent } from '../../shared/image-lightbox.component';
 import { MediaUrlPipe } from '../../shared/media-url.pipe';
 
+interface StatGroup {
+  label: string | null;
+  stats: ModelStat[];
+}
+
 @Component({
   selector: 'app-model-digitals',
   standalone: true,
@@ -19,8 +24,9 @@ import { MediaUrlPipe } from '../../shared/media-url.pipe';
           <a class="name" [routerLink]="['/model', model.id]">{{ model.name }}</a>
         </header>
 
-        <p class="stats-bar" *ngIf="stats.length">
-          <span class="stat" *ngFor="let stat of stats">
+        <p class="stats-bar" *ngFor="let group of statGroups">
+          <span class="stat stat--twin" *ngIf="group.label">{{ group.label }}</span>
+          <span class="stat" *ngFor="let stat of group.stats">
             <span class="label">{{ stat.label }}</span> {{ stat.value }}
           </span>
         </p>
@@ -106,6 +112,7 @@ import { MediaUrlPipe } from '../../shared/media-url.pipe';
     }
     .stat { white-space: nowrap; }
     .stat .label { color: #888; }
+    .stat--twin { color: #1a1a1a; font-weight: 500; letter-spacing: 0.18em; }
 
     .gallery {
       display: grid;
@@ -163,7 +170,7 @@ import { MediaUrlPipe } from '../../shared/media-url.pipe';
 export class ModelDigitalsComponent implements OnInit, OnDestroy {
   model: Model | null = null;
   loading = true;
-  stats: ModelStat[] = [];
+  statGroups: StatGroup[] = [];
   lightboxIndex: number | null = null;
 
   constructor(private route: ActivatedRoute, private models: ModelsService) {}
@@ -184,9 +191,19 @@ export class ModelDigitalsComponent implements OnInit, OnDestroy {
       const path = params.get('digitalsPath')!;
       this.loading = true;
       this.model = await this.models.getByDigitalsPath(path);
-      this.stats = this.model ? modelStats(this.model) : [];
+      this.statGroups = this.model ? this.buildStatGroups(this.model) : [];
       this.loading = false;
     });
+  }
+
+  private buildStatGroups(model: Model): StatGroup[] {
+    if (model.isTwin) {
+      return [
+        { label: model.twinName1?.trim() || 'Twin 1', stats: modelStats(model, 1) },
+        { label: model.twinName2?.trim() || 'Twin 2', stats: modelStats(model, 2) },
+      ];
+    }
+    return [{ label: null, stats: modelStats(model, 1) }];
   }
 
   ngOnDestroy() {

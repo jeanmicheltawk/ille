@@ -56,7 +56,18 @@ import { CategoriesService } from '../../core/categories.service';
       <section *ngIf="tab==='models'">
         <div class="models-head">
           <h3>Models ({{ models.length }})</h3>
-          <button type="button" class="btn" (click)="openAddModel()">Add a model</button>
+          <div class="models-head__actions">
+            <button
+              type="button"
+              class="btn btn--ghost btn--sm"
+              (click)="cleanupOrphans()"
+              [disabled]="cleaningOrphans"
+              title="Delete unused images left behind by edits/deletions to free database storage"
+            >
+              {{ cleaningOrphans ? 'Cleaning…' : 'Clean unused images' }}
+            </button>
+            <button type="button" class="btn" (click)="openAddModel()">Add a model</button>
+          </div>
         </div>
 
         <table class="tbl">
@@ -219,15 +230,58 @@ import { CategoriesService } from '../../core/categories.service';
               <p class="field-error" *ngIf="fieldErrors['category']">{{ fieldErrors['category'] }}</p>
             </div>
             <div class="field"><label>City</label><input name="city" [(ngModel)]="editing.city" /></div>
-            <div class="field"><label>Height</label><input type="number" name="height" [(ngModel)]="editing.height" /></div>
-            <div class="field"><label>Bust</label><input type="number" name="bust" [(ngModel)]="editing.bust" /></div>
-            <div class="field"><label>Waist</label><input type="number" name="waist" [(ngModel)]="editing.waist" /></div>
-            <div class="field"><label>Hips</label><input type="number" name="hips" [(ngModel)]="editing.hips" /></div>
-            <div class="field"><label>Shoe</label><input type="number" name="shoeSize" [(ngModel)]="editing.shoeSize" /></div>
-            <div class="field"><label>Hair</label><input name="hair" [(ngModel)]="editing.hair" /></div>
-            <div class="field"><label>Eyes</label><input name="eyes" [(ngModel)]="editing.eyes" /></div>
-            <div class="field"><label>Instagram</label><input name="ig" [(ngModel)]="editing.instagram" placeholder="@username" /></div>
+            <div class="field">
+              <label>Profile type</label>
+              <select name="modelType" [ngModel]="editing.isTwin ? 'twins' : 'single'" (ngModelChange)="setModelType($event)">
+                <option value="single">Single model</option>
+                <option value="twins">Twins (one profile)</option>
+              </select>
+            </div>
           </div>
+
+          <!-- SINGLE MODEL measurements -->
+          <ng-container *ngIf="!editing.isTwin">
+            <p class="section-label">Measurements</p>
+            <div class="grid3">
+              <div class="field"><label>Height</label><input type="number" name="height" [(ngModel)]="editing.height" /></div>
+              <div class="field"><label>Bust</label><input type="number" name="bust" [(ngModel)]="editing.bust" /></div>
+              <div class="field"><label>Waist</label><input type="number" name="waist" [(ngModel)]="editing.waist" /></div>
+              <div class="field"><label>Hips</label><input type="number" name="hips" [(ngModel)]="editing.hips" /></div>
+              <div class="field"><label>Shoe</label><input type="number" name="shoeSize" [(ngModel)]="editing.shoeSize" /></div>
+              <div class="field"><label>Hair</label><input name="hair" [(ngModel)]="editing.hair" /></div>
+              <div class="field"><label>Eyes</label><input name="eyes" [(ngModel)]="editing.eyes" /></div>
+              <div class="field"><label>Instagram</label><input name="ig" [(ngModel)]="editing.instagram" placeholder="@username" /></div>
+            </div>
+          </ng-container>
+
+          <!-- TWINS: two sets of measurements + two Instagram accounts -->
+          <ng-container *ngIf="editing.isTwin">
+            <p class="section-label">Twin 1</p>
+            <div class="grid3">
+              <div class="field"><label>Name</label><input name="twinName1" [(ngModel)]="editing.twinName1" placeholder="First twin's name" /></div>
+              <div class="field"><label>Instagram</label><input name="ig" [(ngModel)]="editing.instagram" placeholder="@username" /></div>
+              <div class="field"><label>Height</label><input type="number" name="height" [(ngModel)]="editing.height" /></div>
+              <div class="field"><label>Bust</label><input type="number" name="bust" [(ngModel)]="editing.bust" /></div>
+              <div class="field"><label>Waist</label><input type="number" name="waist" [(ngModel)]="editing.waist" /></div>
+              <div class="field"><label>Hips</label><input type="number" name="hips" [(ngModel)]="editing.hips" /></div>
+              <div class="field"><label>Shoe</label><input type="number" name="shoeSize" [(ngModel)]="editing.shoeSize" /></div>
+              <div class="field"><label>Hair</label><input name="hair" [(ngModel)]="editing.hair" /></div>
+              <div class="field"><label>Eyes</label><input name="eyes" [(ngModel)]="editing.eyes" /></div>
+            </div>
+
+            <p class="section-label">Twin 2</p>
+            <div class="grid3">
+              <div class="field"><label>Name</label><input name="twinName2" [(ngModel)]="editing.twinName2" placeholder="Second twin's name" /></div>
+              <div class="field"><label>Instagram</label><input name="ig2" [(ngModel)]="editing.instagram2" placeholder="@username" /></div>
+              <div class="field"><label>Height</label><input type="number" name="height2" [(ngModel)]="editing.height2" /></div>
+              <div class="field"><label>Bust</label><input type="number" name="bust2" [(ngModel)]="editing.bust2" /></div>
+              <div class="field"><label>Waist</label><input type="number" name="waist2" [(ngModel)]="editing.waist2" /></div>
+              <div class="field"><label>Hips</label><input type="number" name="hips2" [(ngModel)]="editing.hips2" /></div>
+              <div class="field"><label>Shoe</label><input type="number" name="shoeSize2" [(ngModel)]="editing.shoeSize2" /></div>
+              <div class="field"><label>Hair</label><input name="hair2" [(ngModel)]="editing.hair2" /></div>
+              <div class="field"><label>Eyes</label><input name="eyes2" [(ngModel)]="editing.eyes2" /></div>
+            </div>
+          </ng-container>
 
           <div class="field cover-field" [class.field--invalid]="fieldErrors['coverImage']">
             <label>Cover image (main profile photo)</label>
@@ -380,6 +434,12 @@ import { CategoriesService } from '../../core/categories.service';
       font-size: 18px;
       font-weight: 200;
       margin: 0;
+    }
+    .models-head__actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
     }
 
     .model-modal-backdrop {
@@ -649,6 +709,7 @@ export class AdminDashboardComponent implements OnInit {
   fieldErrors: Record<string, string> = {};
   actionMessage = '';
   actionKind: 'success' | 'error' = 'success';
+  cleaningOrphans = false;
 
   constructor(
     private modelsSvc: ModelsService,
@@ -699,7 +760,7 @@ export class AdminDashboardComponent implements OnInit {
   private blank(): Model {
     return {
       id: '', name: '', branch: 'women', category: '', outOfTown: false,
-      published: true, coverImage: '',
+      published: true, coverImage: '', isTwin: false,
       gallery: [], digitals: [],
     };
   }
@@ -743,6 +804,10 @@ export class AdminDashboardComponent implements OnInit {
     return this.editing.name ? digitalsNameSlug(this.editing.name) : '';
   }
 
+  setModelType(value: string) {
+    this.editing.isTwin = value === 'twins';
+  }
+
   private validateModel(): boolean {
     this.fieldErrors = {};
     const missing: string[] = [];
@@ -775,6 +840,19 @@ export class AdminDashboardComponent implements OnInit {
     this.editing.digitals = this.editing.digitals || [];
     if (!this.editing.category || isBranchCategory(this.editing.category)) {
       this.editing.category = '';
+    }
+    if (!this.editing.isTwin) {
+      this.editing.isTwin = false;
+      this.editing.twinName1 = undefined;
+      this.editing.twinName2 = undefined;
+      this.editing.instagram2 = undefined;
+      this.editing.height2 = undefined;
+      this.editing.bust2 = undefined;
+      this.editing.waist2 = undefined;
+      this.editing.hips2 = undefined;
+      this.editing.shoeSize2 = undefined;
+      this.editing.hair2 = undefined;
+      this.editing.eyes2 = undefined;
     }
     if (!this.editing.pdfUrl?.trim()) this.editing.pdfUrl = undefined;
     if (!this.editing.introVideoUrl?.trim()) this.editing.introVideoUrl = undefined;
@@ -869,6 +947,24 @@ export class AdminDashboardComponent implements OnInit {
   async logout() {
     await this.auth.signOut();
     this.router.navigate(['/']);
+  }
+
+  async cleanupOrphans() {
+    if (this.cleaningOrphans) return;
+    if (!confirm('Delete images that are no longer used by any model to free up database storage?')) {
+      return;
+    }
+    this.cleaningOrphans = true;
+    try {
+      const res = await this.modelsSvc.cleanupOrphanMedia();
+      this.setActionMessage(
+        `Cleanup done — removed ${res.deleted} unused image(s) of ${res.scanned} checked.`,
+      );
+    } catch (err) {
+      this.setActionMessage(this.getErrorMessage(err), 'error');
+    } finally {
+      this.cleaningOrphans = false;
+    }
   }
 
   private setActionMessage(message: string, kind: 'success' | 'error' = 'success') {

@@ -83,6 +83,64 @@ async function fetchMedia(queryFn, id) {
   return { id: row.id, mimeType: row.mime_type, data: row.data };
 }
 
+/** Collect the media IDs referenced by any mix of refs / arrays of refs. */
+function collectMediaIds(...values) {
+  const ids = new Set();
+  const walk = (v) => {
+    if (v == null) return;
+    if (Array.isArray(v)) return v.forEach(walk);
+    if (typeof v === 'string' && v.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(v);
+        if (Array.isArray(parsed)) return parsed.forEach(walk);
+      } catch {
+        /* fall through */
+      }
+    }
+    const id = parseMediaRef(String(v));
+    if (id) ids.add(id);
+  };
+  values.forEach(walk);
+  return [...ids];
+}
+
+/** True if the media ID is still referenced anywhere in the database. */
+async function isMediaReferenced(queryFn, id) {
+  const like = `%${id}%`;
+  const { rows } = await queryFn(
+    `SELECT 1 WHERE
+       EXISTS (
+         SELECT 1 FROM models WHERE
+           "coverImage" LIKE $1 OR gallery::text LIKE $1 OR digitals::text LIKE $1
+           OR "pdfUrl" LIKE $1 OR "introVideoUrl" LIKE $1 OR "catwalkVideoUrl" LIKE $1
+       )
+       OR EXISTS (SELECT 1 FROM service_items WHERE "backgroundImage" LIKE $1)
+       OR EXISTS (
+         SELECT 1 FROM applications WHERE
+           "fullShotUrl" LIKE $1 OR "halfShotUrl" LIKE $1
+           OR "closeupShotUrl" LIKE $1 OR "profileShotUrl" LIKE $1
+       )`,
+    [like],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Delete the given media IDs, but only the ones no longer referenced anywhere.
+ * Safe to call with candidates that might still be in use — those are skipped.
+ * Returns the number of files actually removed.
+ */
+async function deleteUnreferencedMedia(queryFn, ids) {
+  const unique = [...new Set((ids || []).filter(Boolean))];
+  let deleted = 0;
+  for (const id of unique) {
+    if (await isMediaReferenced(queryFn, id)) continue;
+    const res = await queryFn('DELETE FROM media_files WHERE id = $1', [id]);
+    deleted += res.rowCount || 0;
+  }
+  return deleted;
+}
+
 /** Import a legacy /uploads/... disk file into media_files. */
 async function ingestLegacyUploadPath(queryFn, uploadsDir, ref) {
   if (!ref || typeof ref !== 'string' || !ref.includes('/uploads/')) return ref;
@@ -124,6 +182,9 @@ module.exports = {
   storeFile,
   storeBuffer,
   fetchMedia,
+  collectMediaIds,
+  isMediaReferenced,
+  deleteUnreferencedMedia,
   migrateRefToDb,
   migrateRefListToDb,
 };

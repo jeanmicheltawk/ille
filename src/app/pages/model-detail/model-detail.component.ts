@@ -9,6 +9,13 @@ import { ModelProfileLinksComponent } from './model-profile-links.component';
 import { ImageLightboxComponent } from '../../shared/image-lightbox.component';
 import { MediaUrlPipe } from '../../shared/media-url.pipe';
 
+interface ProfilePerson {
+  label: string | null;
+  stats: ModelStat[];
+  instagramHandle: string;
+  instagramUrl: string;
+}
+
 @Component({
   selector: 'app-model-detail',
   standalone: true,
@@ -19,26 +26,32 @@ import { MediaUrlPipe } from '../../shared/media-url.pipe';
         <div class="profile__info">
           <h1>{{ model.name }}</h1>
 
-          <dl class="stats" *ngIf="stats.length">
-            <div *ngFor="let stat of stats">
-              <dt>{{ stat.label }}</dt>
-              <dd>{{ stat.value }}</dd>
-            </div>
-          </dl>
+          <div class="people" [class.people--twins]="model.isTwin">
+            <div class="person" *ngFor="let p of people">
+              <h2 class="person__name" *ngIf="p.label">{{ p.label }}</h2>
 
-          <a
-            *ngIf="model.instagram"
-            class="instagram"
-            [href]="instagramUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-              <path fill="currentColor" d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.9.3 2.3.5.6.2 1 .5 1.5 1 .5.5.8.9 1 1.5.2.4.4 1.1.5 2.3.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.3 1.9-.5 2.3-.2.6-.5 1-1 1.5-.5.5-.9.8-1.5 1-.4.2-1.1.4-2.3.5-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.9-.3-2.3-.5-.6-.2-1-.5-1.5-1-.5-.5-.8-.9-1-1.5-.2-.4-.4-1.1-.5-2.3C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.3-1.9.5-2.3.2-.6.5-1 1-1.5.5-.5.9-.8 1.5-1 .4-.2 1.1-.4 2.3-.5C8.4 2.2 8.8 2.2 12 2.2m0-2.2C8.7 0 8.3 0 7 0.1 5.7.2 4.8.4 4 .7 3.2 1 2.5 1.4 1.8 2.1.4 2.8 0 3.5-.3 4.3-.6 5.1-.8 6-.9 7.3 0 8.6 0 9 0 12s0 3.4.1 4.7c.1 1.3.3 2.2.6 3 .3.8.7 1.5 1.4 2.2.7.7 1.4 1.1 2.2 1.4.8.3 1.7.5 3 .6 1.3.1 1.7.1 4.7.1s3.4 0 4.7-.1c1.3-.1 2.2-.3 3-.6.8-.3 1.5-.7 2.2-1.4.7-.7 1.1-1.4 1.4-2.2.3-.8.5-1.7.6-3 .1-1.3.1-1.7.1-4.7s0-3.4-.1-4.7c-.1-1.3-.3-2.2-.6-3-.3-.8-.7-1.5-1.4-2.2-.7-.7-1.4-1.1-2.2-1.4-.8-.3-1.7-.5-3-.6C15.4 0 15 0 12 0z"/>
-              <path fill="currentColor" d="M12 5.8A6.2 6.2 0 1 0 18.2 12 6.2 6.2 0 0 0 12 5.8m0 10.2A4 4 0 1 1 16 12a4 4 0 0 1-4 4m6.4-11.5a1.4 1.4 0 1 1-1.4-1.4 1.4 1.4 0 0 1 1.4 1.4"/>
-            </svg>
-            {{ instagramHandle }}
-          </a>
+              <dl class="stats" *ngIf="p.stats.length">
+                <div *ngFor="let stat of p.stats">
+                  <dt>{{ stat.label }}</dt>
+                  <dd>{{ stat.value }}</dd>
+                </div>
+              </dl>
+
+              <a
+                *ngIf="p.instagramHandle"
+                class="instagram"
+                [href]="p.instagramUrl"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                  <path fill="currentColor" d="M12 2.2c3.2 0 3.6 0 4.9.1 1.2.1 1.9.3 2.3.5.6.2 1 .5 1.5 1 .5.5.8.9 1 1.5.2.4.4 1.1.5 2.3.1 1.3.1 1.7.1 4.9s0 3.6-.1 4.9c-.1 1.2-.3 1.9-.5 2.3-.2.6-.5 1-1 1.5-.5.5-.9.8-1.5 1-.4.2-1.1.4-2.3.5-1.3.1-1.7.1-4.9.1s-3.6 0-4.9-.1c-1.2-.1-1.9-.3-2.3-.5-.6-.2-1-.5-1.5-1-.5-.5-.8-.9-1-1.5-.2-.4-.4-1.1-.5-2.3C2.2 15.6 2.2 15.2 2.2 12s0-3.6.1-4.9c.1-1.2.3-1.9.5-2.3.2-.6.5-1 1-1.5.5-.5.9-.8 1.5-1 .4-.2 1.1-.4 2.3-.5C8.4 2.2 8.8 2.2 12 2.2m0-2.2C8.7 0 8.3 0 7 0.1 5.7.2 4.8.4 4 .7 3.2 1 2.5 1.4 1.8 2.1.4 2.8 0 3.5-.3 4.3-.6 5.1-.8 6-.9 7.3 0 8.6 0 9 0 12s0 3.4.1 4.7c.1 1.3.3 2.2.6 3 .3.8.7 1.5 1.4 2.2.7.7 1.4 1.1 2.2 1.4.8.3 1.7.5 3 .6 1.3.1 1.7.1 4.7.1s3.4 0 4.7-.1c1.3-.1 2.2-.3 3-.6.8-.3 1.5-.7 2.2-1.4.7-.7 1.1-1.4 1.4-2.2.3-.8.5-1.7.6-3 .1-1.3.1-1.7.1-4.7s0-3.4-.1-4.7c-.1-1.3-.3-2.2-.6-3-.3-.8-.7-1.5-1.4-2.2-.7-.7-1.4-1.1-2.2-1.4-.8-.3-1.7-.5-3-.6C15.4 0 15 0 12 0z"/>
+                  <path fill="currentColor" d="M12 5.8A6.2 6.2 0 1 0 18.2 12 6.2 6.2 0 0 0 12 5.8m0 10.2A4 4 0 1 1 16 12a4 4 0 0 1-4 4m6.4-11.5a1.4 1.4 0 1 1-1.4-1.4 1.4 1.4 0 0 1 1.4 1.4"/>
+                </svg>
+                {{ p.instagramHandle }}
+              </a>
+            </div>
+          </div>
 
           <app-model-profile-links [model]="model" />
         </div>
@@ -98,6 +111,20 @@ import { MediaUrlPipe } from '../../shared/media-url.pipe';
       text-transform: uppercase;
       line-height: 1;
       margin: 0 0 32px;
+    }
+    .people--twins {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: clamp(24px, 4vw, 48px);
+    }
+    .person__name {
+      font-size: 13px;
+      font-weight: 400;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin: 0 0 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(26, 26, 26, 0.15);
     }
     .stats {
       display: flex;
@@ -183,13 +210,14 @@ import { MediaUrlPipe } from '../../shared/media-url.pipe';
     @media (max-width: 860px) {
       .profile { grid-template-columns: 1fr; }
       .profile__image { order: -1; }
+      .people--twins { grid-template-columns: 1fr; }
     }
   `],
 })
 export class ModelDetailComponent implements OnInit, OnDestroy {
   model: Model | null = null;
   loading = true;
-  stats: ModelStat[] = [];
+  people: ProfilePerson[] = [];
   lightboxIndex: number | null = null;
 
   constructor(private route: ActivatedRoute, private models: ModelsService) {}
@@ -214,7 +242,7 @@ export class ModelDetailComponent implements OnInit, OnDestroy {
       const id = params.get('id')!;
       this.loading = true;
       this.model = await this.models.get(id);
-      this.stats = this.model ? modelStats(this.model) : [];
+      this.people = this.model ? this.buildPeople(this.model) : [];
       this.loading = false;
     });
   }
@@ -223,14 +251,25 @@ export class ModelDetailComponent implements OnInit, OnDestroy {
     document.body.style.overflow = '';
   }
 
-  get instagramHandle(): string {
-    const ig = this.model?.instagram?.trim() || '';
-    return ig.startsWith('@') ? ig.slice(1) : ig;
+  private buildPeople(model: Model): ProfilePerson[] {
+    if (model.isTwin) {
+      return [
+        this.makePerson(model.twinName1?.trim() || 'Twin 1', modelStats(model, 1), model.instagram),
+        this.makePerson(model.twinName2?.trim() || 'Twin 2', modelStats(model, 2), model.instagram2),
+      ];
+    }
+    return [this.makePerson(null, modelStats(model, 1), model.instagram)];
   }
 
-  get instagramUrl(): string {
-    const handle = this.instagramHandle;
-    return handle ? `https://instagram.com/${handle}` : '#';
+  private makePerson(label: string | null, stats: ModelStat[], instagram?: string): ProfilePerson {
+    const raw = instagram?.trim() || '';
+    const handle = raw.startsWith('@') ? raw.slice(1) : raw;
+    return {
+      label,
+      stats,
+      instagramHandle: handle,
+      instagramUrl: handle ? `https://instagram.com/${handle}` : '#',
+    };
   }
 
   modelsBack(): string[] {

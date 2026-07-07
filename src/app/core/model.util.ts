@@ -6,20 +6,23 @@ export interface ModelStat {
   value: string | number;
 }
 
-const MODEL_STAT_FIELDS: { key: keyof Model; label: string }[] = [
-  { key: 'height', label: 'Height' },
-  { key: 'bust', label: 'Bust' },
-  { key: 'waist', label: 'Waist' },
-  { key: 'hips', label: 'Hips' },
-  { key: 'shoeSize', label: 'Shoe' },
-  { key: 'hair', label: 'Hair' },
-  { key: 'eyes', label: 'Eyes' },
+const MODEL_STAT_FIELDS: { key: keyof Model; twinKey: keyof Model; label: string }[] = [
+  { key: 'height', twinKey: 'height2', label: 'Height' },
+  { key: 'bust', twinKey: 'bust2', label: 'Bust' },
+  { key: 'waist', twinKey: 'waist2', label: 'Waist' },
+  { key: 'hips', twinKey: 'hips2', label: 'Hips' },
+  { key: 'shoeSize', twinKey: 'shoeSize2', label: 'Shoe' },
+  { key: 'hair', twinKey: 'hair2', label: 'Hair' },
+  { key: 'eyes', twinKey: 'eyes2', label: 'Eyes' },
 ];
 
-/** Build display stats from whichever measurement fields exist on the model. */
-export function modelStats(model: Model): ModelStat[] {
-  return MODEL_STAT_FIELDS.flatMap(({ key, label }) => {
-    const value = model[key];
+/**
+ * Build display stats from whichever measurement fields exist on the model.
+ * Pass `which = 2` to read the second twin's measurement fields.
+ */
+export function modelStats(model: Model, which: 1 | 2 = 1): ModelStat[] {
+  return MODEL_STAT_FIELDS.flatMap(({ key, twinKey, label }) => {
+    const value = model[which === 2 ? twinKey : key];
     if (value === null || value === undefined || value === '') return [];
     return [{ label, value: value as string | number }];
   });

@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ModelsService } from '../../core/models.service';
 import { CategoriesService } from '../../core/categories.service';
-import { modelStats, normalizeModelCategory } from '../../core/model.util';
+import { modelStats, ModelStat, normalizeModelCategory } from '../../core/model.util';
 import { Model, ModelCategory, ModelsBranch } from '../../core/models.types';
 import { MediaUrlPipe } from '../../shared/media-url.pipe';
 import {
@@ -46,11 +46,16 @@ import {
            class="card rise" [style.animation-delay]="(i * 0.06) + 's'">
           <div class="card__img" [style.background-image]="'url(' + (m.coverImage | mediaUrl) + ')'">
             <span *ngIf="m.outOfTown" class="card__badge">Out of town</span>
-            <ng-container *ngIf="modelStats(m) as stats">
-              <div class="card__stats" *ngIf="stats.length">
-                <div *ngFor="let stat of stats" class="card__stat">
-                  <span class="card__stat-label">{{ stat.label }}</span>
-                  <span class="card__stat-value">{{ stat.value }}</span>
+            <ng-container *ngIf="cardStatGroups(m) as groups">
+              <div class="card__stats" *ngIf="groups.length">
+                <div class="card__stat-groups" [class.card__stat-groups--twins]="groups.length > 1">
+                  <div class="card__stat-group" *ngFor="let g of groups">
+                    <span class="card__stat-twin" *ngIf="g.label">{{ g.label }}</span>
+                    <div *ngFor="let stat of g.stats" class="card__stat">
+                      <span class="card__stat-label">{{ stat.label }}</span>
+                      <span class="card__stat-value">{{ stat.value }}</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </ng-container>
@@ -167,6 +172,39 @@ import {
       opacity: 1;
       transform: translateY(0);
     }
+    .card__stat-groups {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .card__stat-groups--twins {
+      flex-direction: row;
+      gap: 12px;
+    }
+    .card__stat-groups--twins .card__stat-group {
+      flex: 1 1 0;
+      min-width: 0;
+    }
+    .card__stat-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .card__stat-twin {
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--ink);
+      font-weight: 400;
+      padding-bottom: 4px;
+      margin-bottom: 2px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.22);
+    }
+    .card__stat-groups--twins .card__stat {
+      gap: 6px;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+    }
     .card__stat {
       display: grid;
       grid-template-columns: 1fr auto;
@@ -213,8 +251,6 @@ import {
   `],
 })
 export class ModelsComponent implements OnInit {
-  readonly modelStats = modelStats;
-
   all: Model[] = [];
   visible: Model[] = [];
   categories: ModelCategory[] = [];
@@ -319,5 +355,16 @@ export class ModelsComponent implements OnInit {
 
   private applyFilter() {
     this.visible = this.onlyOutOfTown ? this.all.filter((m) => m.outOfTown) : this.all;
+  }
+
+  cardStatGroups(m: Model): { label: string | null; stats: ModelStat[] }[] {
+    if (m.isTwin) {
+      return [
+        { label: m.twinName1?.trim() || 'Twin 1', stats: modelStats(m, 1) },
+        { label: m.twinName2?.trim() || 'Twin 2', stats: modelStats(m, 2) },
+      ].filter((g) => g.stats.length);
+    }
+    const stats = modelStats(m, 1);
+    return stats.length ? [{ label: null, stats }] : [];
   }
 }
