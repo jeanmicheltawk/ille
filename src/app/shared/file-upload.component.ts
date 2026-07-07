@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { ControlValueAccessor, NG_VALUE_ACCESSOR } from '@angular/forms';
 import { UploadService } from '../core/upload.service';
 import { mediaUrl } from '../core/media-url.util';
+import { compressImage } from '../core/image-compress.util';
 
 export type FileUploadAccept = 'image' | 'pdf' | 'video';
 
@@ -274,10 +275,11 @@ export class FileUploadComponent implements ControlValueAccessor {
       const urls: string[] = [];
       for (const file of files) {
         this.currentFileName = file.name;
+        const toSend = this.accept === 'image' ? await compressImage(file) : file;
         const url =
           this.accept === 'video'
-            ? await this.uploadSvc.uploadVideo(file)
-            : await this.uploadSvc.upload(file);
+            ? await this.uploadSvc.uploadVideo(toSend)
+            : await this.uploadSvc.upload(toSend);
         this.labels.set(url, file.name);
         urls.push(url);
         this.uploadedCount++;
