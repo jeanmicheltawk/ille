@@ -56,18 +56,7 @@ import { CategoriesService } from '../../core/categories.service';
       <section *ngIf="tab==='models'">
         <div class="models-head">
           <h3>Models ({{ models.length }})</h3>
-          <div class="models-head__actions">
-            <button
-              type="button"
-              class="btn btn--ghost btn--sm"
-              (click)="cleanupOrphans()"
-              [disabled]="cleaningOrphans"
-              title="Delete unused images left behind by edits/deletions to free database storage"
-            >
-              {{ cleaningOrphans ? 'Cleaning…' : 'Clean unused images' }}
-            </button>
-            <button type="button" class="btn" (click)="openAddModel()">Add a model</button>
-          </div>
+          <button type="button" class="btn" (click)="openAddModel()">Add a model</button>
         </div>
 
         <table class="tbl">
@@ -435,12 +424,6 @@ import { CategoriesService } from '../../core/categories.service';
       font-weight: 200;
       margin: 0;
     }
-    .models-head__actions {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
 
     .model-modal-backdrop {
       position: fixed;
@@ -709,7 +692,6 @@ export class AdminDashboardComponent implements OnInit {
   fieldErrors: Record<string, string> = {};
   actionMessage = '';
   actionKind: 'success' | 'error' = 'success';
-  cleaningOrphans = false;
 
   constructor(
     private modelsSvc: ModelsService,
@@ -947,24 +929,6 @@ export class AdminDashboardComponent implements OnInit {
   async logout() {
     await this.auth.signOut();
     this.router.navigate(['/']);
-  }
-
-  async cleanupOrphans() {
-    if (this.cleaningOrphans) return;
-    if (!confirm('Delete images that are no longer used by any model to free up database storage?')) {
-      return;
-    }
-    this.cleaningOrphans = true;
-    try {
-      const res = await this.modelsSvc.cleanupOrphanMedia();
-      this.setActionMessage(
-        `Cleanup done — removed ${res.deleted} unused image(s) of ${res.scanned} checked.`,
-      );
-    } catch (err) {
-      this.setActionMessage(this.getErrorMessage(err), 'error');
-    } finally {
-      this.cleaningOrphans = false;
-    }
   }
 
   private setActionMessage(message: string, kind: 'success' | 'error' = 'success') {

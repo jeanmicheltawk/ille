@@ -702,20 +702,6 @@ app.post('/api/admin/upload-file', requireAuth, upload.single('file'), async (re
   }
 });
 
-// One-time / occasional sweep: delete media rows not referenced by anything.
-// Safe — each candidate is re-checked for references before deletion.
-app.post('/api/admin/media/cleanup-orphans', requireAuth, async (req, res) => {
-  try {
-    const { rows } = await query('SELECT id FROM media_files');
-    const ids = rows.map((r) => r.id);
-    const deleted = await deleteUnreferencedMedia(query, ids);
-    res.json({ ok: true, scanned: ids.length, deleted });
-  } catch (err) {
-    console.error('Orphan media cleanup failed:', err);
-    res.status(500).json({ error: err.message || 'Cleanup failed' });
-  }
-});
-
 app.post('/api/admin/upload-video', requireAuth, uploadVideo.single('video'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
