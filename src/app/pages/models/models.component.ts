@@ -232,6 +232,12 @@ export class ModelsComponent implements OnInit {
   ) {}
 
   async ngOnInit() {
+    const initialBranch = this.route.snapshot.paramMap.get('branch');
+    if (isBranchTab(initialBranch)) {
+      this.branch = initialBranch;
+      this.subCategory = this.route.snapshot.paramMap.get('category') ?? '';
+    }
+
     this.categories = await this.categoriesSvc.listPublished();
     this.route.paramMap.subscribe(async (params) => {
       const branchParam = params.get('branch');

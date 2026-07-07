@@ -46,7 +46,17 @@ export type FileUploadAccept = 'image' | 'pdf' | 'video';
         <span class="file-upload__hint">{{ hint }}</span>
       </label>
 
-      <p class="file-upload__status" *ngIf="uploading">Uploading…</p>
+      <div class="file-upload__progress" *ngIf="uploading">
+        <div class="file-upload__progress-head">
+          <span class="file-upload__spinner" aria-hidden="true"></span>
+          <span *ngIf="totalCount > 1">Uploading {{ uploadedCount }} of {{ totalCount }} files… ({{ totalCount - uploadedCount }} remaining)</span>
+          <span *ngIf="totalCount <= 1">Uploading…</span>
+        </div>
+        <div class="file-upload__bar" *ngIf="totalCount > 1">
+          <div class="file-upload__bar-fill" [style.width.%]="progressPercent"></div>
+        </div>
+        <p class="file-upload__current" *ngIf="currentFileName">{{ currentFileName }}</p>
+      </div>
       <p class="file-upload__status file-upload__status--err" *ngIf="error">{{ error }}</p>
     </div>
   `,
@@ -142,6 +152,46 @@ export type FileUploadAccept = 'image' | 'pdf' | 'video';
       color: var(--ink-muted);
     }
     .file-upload__status--err { color: var(--error); }
+    .file-upload__progress { display: flex; flex-direction: column; gap: 8px; }
+    .file-upload__progress-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--ink);
+      font-weight: 300;
+    }
+    .file-upload__spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid var(--line);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      flex: none;
+      animation: file-upload-spin 0.7s linear infinite;
+    }
+    @keyframes file-upload-spin { to { transform: rotate(360deg); } }
+    .file-upload__bar {
+      width: 100%;
+      height: 6px;
+      background: var(--line);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .file-upload__bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 999px;
+      transition: width 0.25s ease;
+    }
+    .file-upload__current {
+      margin: 0;
+      font-size: 11px;
+      color: var(--ink-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     .file-upload--multi .file-upload__item { width: 72px; height: 90px; }
   `],
 })
@@ -153,12 +203,20 @@ export class FileUploadComponent implements ControlValueAccessor {
 
   uploading = false;
   error = '';
+  uploadedCount = 0;
+  totalCount = 0;
+  currentFileName = '';
   private value: string | string[] = '';
   private labels = new Map<string, string>();
   private onChange: (v: string | string[]) => void = () => {};
   private onTouched: () => void = () => {};
 
   constructor(private uploadSvc: UploadService) {}
+
+  get progressPercent(): number {
+    if (!this.totalCount) return 0;
+    return Math.round((this.uploadedCount / this.totalCount) * 100);
+  }
 
   get acceptAttr(): string {
     if (this.accept === 'pdf') return 'application/pdf,.pdf';
@@ -208,16 +266,21 @@ export class FileUploadComponent implements ControlValueAccessor {
 
     this.error = '';
     this.uploading = true;
+    this.uploadedCount = 0;
+    this.totalCount = files.length;
+    this.currentFileName = '';
     this.onTouched();
     try {
       const urls: string[] = [];
       for (const file of files) {
+        this.currentFileName = file.name;
         const url =
           this.accept === 'video'
             ? await this.uploadSvc.uploadVideo(file)
             : await this.uploadSvc.upload(file);
         this.labels.set(url, file.name);
         urls.push(url);
+        this.uploadedCount++;
       }
       if (this.multiple) {
         const current = Array.isArray(this.value) ? this.value : [];
@@ -231,6 +294,7 @@ export class FileUploadComponent implements ControlValueAccessor {
       this.error = err?.error?.error ?? err?.message ?? 'Upload failed. Please try again.';
     } finally {
       this.uploading = false;
+      this.currentFileName = '';
     }
   }
 
