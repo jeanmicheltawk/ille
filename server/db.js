@@ -98,12 +98,14 @@ function categoryFromRow(row) {
 
 function subscriberFromRow(row) {
   if (!row) return null;
+  const rawSource = row.source || 'footer';
+  const [baseSource, topicPart] = String(rawSource).split(':');
   return {
     id: row.id,
     email: row.email,
-    topic: row.topic || 'models',
+    topic: topicPart === 'community' ? 'community' : 'models',
     active: !!row.active,
-    source: row.source || 'footer',
+    source: baseSource || 'footer',
     subscribedAt: row.subscribedAt,
   };
 }

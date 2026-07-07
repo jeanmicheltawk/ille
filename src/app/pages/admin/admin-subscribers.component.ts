@@ -23,11 +23,23 @@ import { EmailSubscriber } from '../../core/models.types';
           </p>
         </div>
         <div class="sub-admin__head-actions">
-          <select [(ngModel)]="topicFilter" name="topicFilter" (ngModelChange)="onTopicChange()">
-            <option value="all">All subscribers</option>
-            <option value="models">Ille Models</option>
-            <option value="community">Community</option>
-          </select>
+          <div class="topic-toggle" role="tablist" aria-label="Subscriber topic filter">
+            <button type="button" class="topic-toggle__btn" [class.is-active]="topicFilter === 'all'"
+              (click)="setTopicFilter('all')">
+              <span>All</span>
+              <em>{{ countLabel('all') }}</em>
+            </button>
+            <button type="button" class="topic-toggle__btn" [class.is-active]="topicFilter === 'models'"
+              (click)="setTopicFilter('models')">
+              <span>Ille Models</span>
+              <em>{{ countLabel('models') }}</em>
+            </button>
+            <button type="button" class="topic-toggle__btn" [class.is-active]="topicFilter === 'community'"
+              (click)="setTopicFilter('community')">
+              <span>Community</span>
+              <em>{{ countLabel('community') }}</em>
+            </button>
+          </div>
           <button type="button" class="btn btn--ghost btn--sm" *ngIf="subscribers.length" (click)="exportCsv()">
             Export CSV
           </button>
@@ -35,7 +47,9 @@ import { EmailSubscriber } from '../../core/models.types';
       </div>
 
       <div class="broadcast" *ngIf="subscribers.length">
-        <p class="section-label">Send message to all subscribers</p>
+        <p class="section-label">
+          Send message to {{ topicFilter === 'all' ? 'all subscribers' : topicLabel(topicFilter) + ' subscribers' }}
+        </p>
         <div class="field">
           <label>Subject</label>
           <input [(ngModel)]="subject" name="subject" placeholder="e.g. Upcoming casting call" />
@@ -94,18 +108,105 @@ import { EmailSubscriber } from '../../core/models.types';
       display: flex;
       align-items: center;
       gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
     }
-    .sub-admin__head-actions select {
-      background: transparent;
+    .topic-toggle {
+      display: inline-flex;
       border: 1px solid var(--line);
+      background: transparent;
+      overflow: hidden;
+      border-radius: 999px;
+      padding: 2px;
+    }
+    .topic-toggle__btn {
+      background: transparent;
+      border: 0;
       color: var(--ink);
-      padding: 6px 10px;
+      min-width: 128px;
+      padding: 8px 12px;
       font-family: inherit;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: background-color 0.25s ease, color 0.25s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border-radius: 999px;
+    }
+    .topic-toggle__btn:hover { color: var(--accent); }
+    .topic-toggle__btn em {
+      font-style: normal;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 7px;
+      line-height: 1;
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      color: var(--ink-muted);
+      transition: border-color 0.25s ease, color 0.25s ease;
+    }
+    .topic-toggle__btn.is-active {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--accent);
+    }
+    .topic-toggle__btn.is-active em {
+      color: var(--accent);
+      border-color: rgba(255, 255, 255, 0.28);
     }
     .broadcast {
       margin-bottom: 36px;
       padding: 24px;
       border: 1px solid var(--line);
+    }
+    .tbl {
+      width: 100%;
+      border-collapse: collapse;
+      border: 1px solid var(--line);
+      table-layout: fixed;
+    }
+    .tbl th, .tbl td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: middle;
+      font-size: 13px;
+      font-weight: 300;
+      color: var(--ink-soft);
+    }
+    .tbl th {
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--ink-muted);
+      font-weight: 400;
+    }
+    .tbl td:first-child {
+      color: var(--ink);
+      word-break: break-word;
+    }
+    .tbl tr:last-child td { border-bottom: 0; }
+    .row-actions {
+      width: 110px;
+      text-align: right;
+    }
+    .row-actions button {
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--ink-soft);
+      padding: 7px 10px;
+      font-size: 10px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: color 0.25s ease, border-color 0.25s ease;
+    }
+    .row-actions button:hover {
+      color: #e46d6d;
+      border-color: #e46d6d;
     }
     .broadcast__actions { margin-top: 16px; }
     .section-label {
@@ -136,9 +237,27 @@ import { EmailSubscriber } from '../../core/models.types';
     }
     .field textarea { resize: vertical; min-height: 120px; }
     code { font-size: 12px; color: var(--ink-soft); }
+    @media (max-width: 960px) {
+      .sub-admin__head { flex-direction: column; }
+      .sub-admin__head-actions { width: 100%; justify-content: space-between; }
+      .topic-toggle { width: 100%; }
+      .topic-toggle__btn { min-width: 0; flex: 1; }
+    }
+    @media (max-width: 640px) {
+      .sub-admin__head-actions { gap: 12px; }
+      .topic-toggle { width: 100%; display: grid; grid-template-columns: 1fr; border-radius: 14px; }
+      .topic-toggle__btn { border-radius: 10px; justify-content: space-between; }
+      .tbl {
+        display: block;
+        overflow-x: auto;
+        white-space: nowrap;
+      }
+      .tbl th, .tbl td { font-size: 12px; }
+    }
   `],
 })
 export class AdminSubscribersComponent implements OnInit {
+  allSubscribers: EmailSubscriber[] = [];
   subscribers: EmailSubscriber[] = [];
   topicFilter: 'all' | SubscriberTopic = 'all';
   emailConfigured = false;
@@ -159,13 +278,14 @@ export class AdminSubscribersComponent implements OnInit {
   }
 
   async refresh() {
-    this.subscribers = await this.newsletter.listSubscribers(
-      this.topicFilter === 'all' ? undefined : this.topicFilter,
-    );
+    this.allSubscribers = await this.newsletter.listSubscribers();
+    this.applyFilter();
   }
 
-  async onTopicChange() {
-    await this.refresh();
+  async setTopicFilter(filter: 'all' | SubscriberTopic) {
+    if (this.topicFilter === filter) return;
+    this.topicFilter = filter;
+    this.applyFilter();
   }
 
   async remove(s: EmailSubscriber) {
@@ -216,6 +336,20 @@ export class AdminSubscribersComponent implements OnInit {
 
   topicLabel(topic?: string) {
     if (topic === 'community') return 'Community';
+    if (topic === 'all') return 'All';
     return 'Ille Models';
+  }
+
+  countLabel(topic: 'all' | SubscriberTopic) {
+    if (topic === 'all') return String(this.allSubscribers.length);
+    return String(this.allSubscribers.filter((s) => (s.topic || 'models') === topic).length);
+  }
+
+  private applyFilter() {
+    if (this.topicFilter === 'all') {
+      this.subscribers = [...this.allSubscribers];
+      return;
+    }
+    this.subscribers = this.allSubscribers.filter((s) => (s.topic || 'models') === this.topicFilter);
   }
 }

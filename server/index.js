@@ -62,15 +62,21 @@ app.get('/api/media/:id', async (req, res) => {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SUBSCRIBER_TOPICS = new Set(['models', 'community']);
 
+function subscriberTopic(sub) {
+  const src = String(sub?.source || '');
+  const parts = src.split(':');
+  return parts[1] === 'community' ? 'community' : 'models';
+}
+
+function subscribeSource(baseSource, topic) {
+  return `${baseSource}:${topic}`;
+}
+
 async function activeSubscribers(topic = null) {
-  if (topic && SUBSCRIBER_TOPICS.has(topic)) {
-    const { rows } = await query(
-      'SELECT * FROM email_subscribers WHERE active = TRUE AND topic = $1',
-      [topic],
-    );
-    return rows;
-  }
   const { rows } = await query('SELECT * FROM email_subscribers WHERE active = TRUE');
+  if (topic && SUBSCRIBER_TOPICS.has(topic)) {
+    return rows.filter((sub) => subscriberTopic(sub) === topic);
+  }
   return rows;
 }
 
@@ -484,12 +490,9 @@ app.post('/api/newsletter/subscribe', async (req, res) => {
   if (!SUBSCRIBER_TOPICS.has(topic)) {
     return res.status(400).json({ error: 'Invalid subscription topic' });
   }
-  const source = (req.body?.source || 'footer').slice(0, 64);
-  const { rows } = await query(
-    'SELECT * FROM email_subscribers WHERE email = $1 AND topic = $2',
-    [raw, topic],
-  );
-  const existing = rows[0];
+  const source = (req.body?.source || 'footer').slice(0, 48);
+  const { rows } = await query('SELECT * FROM email_subscribers WHERE email = $1', [raw]);
+  const existing = rows.find((row) => subscriberTopic(row) === topic);
 
   if (existing) {
     if (!existing.active) {
@@ -506,8 +509,8 @@ app.post('/api/newsletter/subscribe', async (req, res) => {
 
   const token = email.generateToken();
   await query(
-    'INSERT INTO email_subscribers (email, "unsubscribeToken", source, topic) VALUES ($1, $2, $3, $4)',
-    [raw, token, source, topic],
+    'INSERT INTO email_subscribers (email, "unsubscribeToken", source) VALUES ($1, $2, $3)',
+    [raw, token, subscribeSource(source, topic)],
   );
   email.sendWelcome(raw, token, topic).catch((err) =>
     console.error('[email] welcome failed:', err),
@@ -530,18 +533,13 @@ app.post('/api/newsletter/unsubscribe', async (req, res) => {
 
 app.get('/api/admin/subscribers', requireAuth, async (req, res) => {
   const topic = (req.query?.topic || '').toString().trim().toLowerCase();
-  let rows;
-  if (SUBSCRIBER_TOPICS.has(topic)) {
-    ({ rows } = await query(
-      'SELECT * FROM email_subscribers WHERE active = TRUE AND topic = $1 ORDER BY "subscribedAt" DESC',
-      [topic],
-    ));
-  } else {
-    ({ rows } = await query(
-      'SELECT * FROM email_subscribers WHERE active = TRUE ORDER BY "subscribedAt" DESC',
-    ));
-  }
-  res.json(rows.map(subscriberFromRow));
+  const { rows } = await query(
+    'SELECT * FROM email_subscribers WHERE active = TRUE ORDER BY "subscribedAt" DESC',
+  );
+  const filtered = SUBSCRIBER_TOPICS.has(topic)
+    ? rows.filter((row) => subscriberTopic(row) === topic)
+    : rows;
+  res.json(filtered.map(subscriberFromRow));
 });
 
 app.delete('/api/admin/subscribers/:id', requireAuth, async (req, res) => {
