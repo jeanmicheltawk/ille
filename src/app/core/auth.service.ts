@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { CanActivateFn, Router } from '@angular/router';
+import { HttpErrorResponse } from '@angular/common/http';
 import { ApiService } from './api.service';
 
 /**
@@ -19,8 +20,8 @@ export class AuthService {
         const res = await this.api.post<{ token: string }>('/auth/login', { email, password });
         this.api.setToken(res.token);
         return { ok: true };
-      } catch (e: any) {
-        return { ok: false, error: e?.error?.error ?? 'Wrong email or password.' };
+      } catch (e: unknown) {
+        return { ok: false, error: this.loginError(e) };
       }
     }
     if (password === AuthService.DEMO_PASSWORD) {
@@ -28,6 +29,17 @@ export class AuthService {
       return { ok: true };
     }
     return { ok: false, error: 'Demo password is "illedemo" until the backend is connected.' };
+  }
+
+  private loginError(e: unknown): string {
+    if (e instanceof HttpErrorResponse) {
+      if (e.status === 401) return e.error?.error ?? 'Wrong email or password.';
+      if (e.status === 0 || e.status >= 500) {
+        return 'The server is starting up or temporarily unavailable. Please wait a moment and try again.';
+      }
+      if (e.error?.error) return e.error.error;
+    }
+    return 'Could not sign in. Please try again.';
   }
 
   async signOut(): Promise<void> {

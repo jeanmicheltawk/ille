@@ -1,5 +1,5 @@
 import { Injectable } from '@angular/core';
-import { HttpClient, HttpHeaders } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse, HttpHeaders } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 
@@ -34,19 +34,58 @@ export class ApiService {
 
   // ---- verbs ----
   get<T>(path: string): Promise<T> {
-    return firstValueFrom(this.http.get<T>(this.base + path, { headers: this.authHeaders() }));
+    return this.withRetry(() =>
+      firstValueFrom(this.http.get<T>(this.base + path, { headers: this.authHeaders() })),
+    );
   }
   post<T>(path: string, body: unknown): Promise<T> {
-    return firstValueFrom(this.http.post<T>(this.base + path, body, { headers: this.authHeaders() }));
+    return this.withRetry(() =>
+      firstValueFrom(this.http.post<T>(this.base + path, body, { headers: this.authHeaders() })),
+    );
   }
   put<T>(path: string, body: unknown): Promise<T> {
-    return firstValueFrom(this.http.put<T>(this.base + path, body, { headers: this.authHeaders() }));
+    return this.withRetry(() =>
+      firstValueFrom(this.http.put<T>(this.base + path, body, { headers: this.authHeaders() })),
+    );
   }
   delete<T>(path: string): Promise<T> {
-    return firstValueFrom(this.http.delete<T>(this.base + path, { headers: this.authHeaders() }));
+    return this.withRetry(() =>
+      firstValueFrom(this.http.delete<T>(this.base + path, { headers: this.authHeaders() })),
+    );
   }
   // multipart upload (FormData sets its own Content-Type)
   upload<T>(path: string, form: FormData): Promise<T> {
-    return firstValueFrom(this.http.post<T>(this.base + path, form, { headers: this.authHeaders() }));
+    return this.withRetry(() =>
+      firstValueFrom(this.http.post<T>(this.base + path, form, { headers: this.authHeaders() })),
+    );
+  }
+
+  /**
+   * The API runs on a host that can cold-start or briefly restart, returning
+   * gateway errors (502/503/504) or network failures (status 0) with no CORS
+   * headers. Those mean the request never reached app logic, so it's safe to
+   * retry with backoff — this makes a sleeping server transparent to the user.
+   */
+  private async withRetry<T>(run: () => Promise<T>, attempts = 5): Promise<T> {
+    let lastErr: unknown;
+    for (let i = 0; i < attempts; i++) {
+      try {
+        return await run();
+      } catch (e) {
+        lastErr = e;
+        if (!this.isTransient(e) || i === attempts - 1) throw e;
+        await this.delay(Math.min(2000 * 2 ** i, 15000));
+      }
+    }
+    throw lastErr;
+  }
+
+  private isTransient(e: unknown): boolean {
+    if (!(e instanceof HttpErrorResponse)) return false;
+    return e.status === 0 || e.status === 502 || e.status === 503 || e.status === 504;
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 }
