@@ -35,8 +35,7 @@ app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 
 const memoryStorage = multer.memoryStorage();
-// WP profile originals are often 30–60 MB; allow room for import + admin uploads.
-const upload = multer({ storage: memoryStorage, limits: { fileSize: 80 * 1024 * 1024 } });
+const upload = multer({ storage: memoryStorage, limits: { fileSize: 25 * 1024 * 1024 } });
 const uploadVideo = multer({ storage: memoryStorage, limits: { fileSize: 100 * 1024 * 1024 } });
 
 function requireAuth(req, res, next) {
@@ -720,7 +719,7 @@ app.use((err, req, res, next) => {
     if (err.code === 'LIMIT_FILE_SIZE') {
       message = err.field === 'video'
         ? 'Video is too large. Try a smaller video (max 100 MB).'
-        : 'File is too large. Try a smaller image (max 80 MB).';
+        : 'File is too large. Try a smaller image (max 25 MB).';
     }
     return res.status(400).json({ error: message });
   }

@@ -1,4 +1,4 @@
-import { Component, OnInit, inject } from '@angular/core';
+import { Component, OnInit, QueryList, ViewChildren, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
 import { FormsModule } from '@angular/forms';
@@ -276,6 +276,7 @@ import { ToastService } from '../../shared/toast.service';
           <div class="field cover-field" [class.field--invalid]="fieldErrors['coverImage']">
             <label>Cover image (main profile photo)</label>
             <app-file-upload
+              #mediaUpload
               name="cover"
               [(ngModel)]="editing.coverImage"
               label="Upload cover photo"
@@ -288,6 +289,7 @@ import { ToastService } from '../../shared/toast.service';
             <label>Profile gallery images</label>
             <p class="field-hint">Extra photos shown on the model profile page — separate from digitals.</p>
             <app-file-upload
+              #mediaUpload
               name="gallery"
               [(ngModel)]="editing.gallery"
               [multiple]="true"
@@ -308,6 +310,7 @@ import { ToastService } from '../../shared/toast.service';
               Digitals page URL: <strong>/{{ digitalsSlug }}digitals</strong>
             </p>
             <app-file-upload
+              #mediaUpload
               name="digitals"
               [(ngModel)]="editing.digitals"
               [multiple]="true"
@@ -320,6 +323,7 @@ import { ToastService } from '../../shared/toast.service';
             <div class="field">
               <label>PDF composite</label>
               <app-file-upload
+                #mediaUpload
                 name="pdfUrl"
                 [(ngModel)]="editing.pdfUrl"
                 accept="pdf"
@@ -330,6 +334,7 @@ import { ToastService } from '../../shared/toast.service';
             <div class="field">
               <label>Introduction video</label>
               <app-file-upload
+                #mediaUpload
                 name="introVideo"
                 [(ngModel)]="editing.introVideoUrl"
                 accept="video"
@@ -340,6 +345,7 @@ import { ToastService } from '../../shared/toast.service';
             <div class="field">
               <label>Catwalk video</label>
               <app-file-upload
+                #mediaUpload
                 name="catwalkVideo"
                 [(ngModel)]="editing.catwalkVideoUrl"
                 accept="video"
@@ -680,6 +686,8 @@ import { ToastService } from '../../shared/toast.service';
   `],
 })
 export class AdminDashboardComponent implements OnInit {
+  @ViewChildren('mediaUpload') mediaUploads!: QueryList<FileUploadComponent>;
+
   tab: 'models' | 'categories' | 'apps' | 'bookings' | 'subscribers' | 'services' = 'models';
   models: Model[] = [];
   categories: ModelCategory[] = [];
@@ -819,6 +827,16 @@ export class AdminDashboardComponent implements OnInit {
 
   async save() {
     if (!this.validateModel()) return;
+
+    if (this.anyMediaUploading()) {
+      this.formError = 'Please wait for uploads to finish, then save again.';
+      return;
+    }
+
+    // Optional media (PDF/video/gallery/digitals) must not block add/update.
+    // Clear upload UI errors and drop non-persisted refs; keep what succeeded.
+    const skippedMedia = this.prepareMediaForSave();
+
     this.editing.gallery = this.editing.gallery || [];
     this.editing.digitals = this.editing.digitals || [];
     if (!this.editing.category || isBranchCategory(this.editing.category)) {
@@ -841,6 +859,13 @@ export class AdminDashboardComponent implements OnInit {
     if (!this.editing.introVideoUrl?.trim()) this.editing.introVideoUrl = undefined;
     if (!this.editing.catwalkVideoUrl?.trim()) this.editing.catwalkVideoUrl = undefined;
 
+    // Cover is required; a failed/cleared cover still blocks save.
+    if (!this.editing.coverImage?.trim()) {
+      this.fieldErrors['coverImage'] = 'Cover image is required.';
+      this.formError = 'Please fill in the missing fields: Cover image.';
+      return;
+    }
+
     const isEdit = !!this.editing.id;
     const actionLabel = isEdit ? 'save changes to this model' : 'add this model';
     if (!confirm(`Are you sure you want to ${actionLabel}?`)) return;
@@ -855,13 +880,63 @@ export class AdminDashboardComponent implements OnInit {
       }
       this.closeModelModal();
       await this.refresh();
-      this.setActionMessage(isEdit ? 'Model updated successfully.' : 'Model added successfully.');
+      const base = isEdit ? 'Model updated successfully.' : 'Model added successfully.';
+      const note = skippedMedia.length
+        ? ` Skipped failed media: ${skippedMedia.join(', ')}.`
+        : '';
+      this.setActionMessage(base + note);
     } catch (err: unknown) {
       const detail = this.getErrorMessage(err);
       const base = isEdit ? 'Could not save model changes.' : 'Could not add model.';
       this.formError = `${base} ${detail}`;
       this.setActionMessage(`${base} ${detail}`, 'error');
     }
+  }
+
+  private anyMediaUploading(): boolean {
+    return (this.mediaUploads || []).some((u) => u.uploading);
+  }
+
+  /**
+   * Ignore failed optional uploads so add/update still goes through.
+   * Clears upload error banners and strips blob/data leftovers.
+   */
+  private prepareMediaForSave(): string[] {
+    const skipped: string[] = [];
+
+    for (const upload of this.mediaUploads || []) {
+      if (!upload.error) continue;
+      if (upload.accept === 'pdf') skipped.push('PDF');
+      else if (upload.accept === 'video') skipped.push('video');
+      else if (upload.multiple) skipped.push('image(s)');
+      else if (!this.editing.coverImage) skipped.push('cover image');
+      else skipped.push('image');
+    }
+
+    const keepRef = (ref: string | undefined | null): string | undefined => {
+      const s = (ref || '').trim();
+      if (!s) return undefined;
+      if (s.startsWith('blob:') || s.startsWith('data:')) return undefined;
+      return s;
+    };
+
+    this.editing.gallery = (this.editing.gallery || [])
+      .map((u) => keepRef(u))
+      .filter((u): u is string => !!u);
+    this.editing.digitals = (this.editing.digitals || [])
+      .map((u) => keepRef(u))
+      .filter((u): u is string => !!u);
+
+    this.editing.coverImage = keepRef(this.editing.coverImage) || '';
+    this.editing.pdfUrl = keepRef(this.editing.pdfUrl);
+    this.editing.introVideoUrl = keepRef(this.editing.introVideoUrl);
+    this.editing.catwalkVideoUrl = keepRef(this.editing.catwalkVideoUrl);
+
+    for (const upload of this.mediaUploads || []) {
+      upload.clearError();
+    }
+
+    return [...new Set(skipped)];
   }
 
   async del(m: Model) {

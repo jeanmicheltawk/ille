@@ -271,10 +271,18 @@ export class FileUploadComponent implements ControlValueAccessor {
     this.totalCount = files.length;
     this.currentFileName = '';
     this.onTouched();
-    try {
-      const urls: string[] = [];
-      for (const file of files) {
-        this.currentFileName = file.name;
+
+    const baseline = this.multiple
+      ? (Array.isArray(this.value) ? [...this.value] : [])
+      : '';
+    const urls: string[] = [];
+    const failures: string[] = [];
+
+    // Upload one-by-one and keep successes even if a later file fails.
+    // A single bad image/PDF/video must not wipe the whole batch from the form.
+    for (const file of files) {
+      this.currentFileName = file.name;
+      try {
         const toSend = this.accept === 'image' ? await compressImage(file) : file;
         const url =
           this.accept === 'video'
@@ -282,22 +290,30 @@ export class FileUploadComponent implements ControlValueAccessor {
             : await this.uploadSvc.upload(toSend);
         this.labels.set(url, file.name);
         urls.push(url);
-        this.uploadedCount++;
+        if (this.multiple) {
+          this.value = [...baseline, ...urls];
+        } else {
+          this.value = url;
+        }
+        this.onChange(this.value);
+      } catch (e: unknown) {
+        failures.push(file.name);
+        const msg = this.uploadErrorMessage(e);
+        this.error =
+          files.length > 1
+            ? `${failures.length} of ${files.length} failed (kept successful uploads). Last error: ${msg}`
+            : msg;
       }
-      if (this.multiple) {
-        const current = Array.isArray(this.value) ? this.value : [];
-        this.value = [...current, ...urls];
-      } else {
-        this.value = urls[0];
-      }
-      this.onChange(this.value);
-    } catch (e: unknown) {
-      const err = e as { error?: { error?: string }; message?: string };
-      this.error = err?.error?.error ?? err?.message ?? 'Upload failed. Please try again.';
-    } finally {
-      this.uploading = false;
-      this.currentFileName = '';
+      this.uploadedCount++;
     }
+
+    this.uploading = false;
+    this.currentFileName = '';
+  }
+
+  /** Clear a previous upload error so save can proceed after the user fixes/removes files. */
+  clearError() {
+    this.error = '';
   }
 
   remove(index: number) {
@@ -312,7 +328,22 @@ export class FileUploadComponent implements ControlValueAccessor {
     } else {
       this.value = '';
     }
+    this.error = '';
     this.onChange(this.value);
     this.onTouched();
+  }
+
+  private uploadErrorMessage(e: unknown): string {
+    if (e && typeof e === 'object') {
+      const err = e as { error?: unknown; message?: string };
+      if (err.error && typeof err.error === 'object') {
+        const nested = (err.error as { error?: unknown; message?: unknown }).error
+          ?? (err.error as { error?: unknown; message?: unknown }).message;
+        if (typeof nested === 'string' && nested.trim()) return nested.trim();
+      }
+      if (typeof err.error === 'string' && err.error.trim()) return err.error.trim();
+      if (typeof err.message === 'string' && err.message.trim()) return err.message.trim();
+    }
+    return 'Upload failed. Please try again.';
   }
 }
