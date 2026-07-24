@@ -111,8 +111,10 @@ interface TypeOption {
                   <textarea name="desc" rows="3" [(ngModel)]="editing.description"></textarea>
                 </div>
                 <div class="field">
-                  <label>Display order <span class="tip">Lower numbers appear first</span></label>
-                  <input type="number" name="sort" [(ngModel)]="editing.sortOrder" />
+                  <label>Position on page <span class="tip">Choose where this appears relative to other items</span></label>
+                  <select name="position" [(ngModel)]="positionAfter" (ngModelChange)="onPositionChange()">
+                    <option *ngFor="let opt of positionOptions" [value]="opt.value">{{ opt.label }}</option>
+                  </select>
                 </div>
                 <div class="field" *ngIf="showCta">
                   <label>Button text <span class="tip">Only if no booking form</span></label>
@@ -481,6 +483,7 @@ export class AdminServicesComponent implements OnInit {
   fieldErrors: Record<string, string> = {};
   actionMessage = '';
   actionKind: 'success' | 'error' = 'success';
+  positionAfter = '__last__';
 
   typeOptions: TypeOption[] = [
     { value: 'events_heading', title: 'Section heading', desc: 'A title that groups content, like "Upcoming Events".', example: 'Upcoming Events' },
@@ -521,6 +524,25 @@ export class AdminServicesComponent implements OnInit {
     return ['promo', 'offering'].includes(this.editing.type);
   }
 
+  get positionOptions(): { value: string; label: string }[] {
+    const others = this.items
+      .filter((s) => s.id && s.id !== this.editing.id)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+    const opts: { value: string; label: string }[] = [
+      { value: '__first__', label: 'First on the page' },
+    ];
+    for (const s of others) {
+      opts.push({
+        value: `after:${s.id}`,
+        label: `After "${s.title || 'Untitled'}"`,
+      });
+    }
+    if (others.length) {
+      opts.push({ value: '__last__', label: 'Last on the page' });
+    }
+    return opts;
+  }
+
   typeName(type: ServiceItemType): string {
     return this.typeOptions.find((t) => t.value === type)?.title ?? type;
   }
@@ -531,6 +553,8 @@ export class AdminServicesComponent implements OnInit {
 
   startNew() {
     this.editing = this.blank();
+    this.positionAfter = '__last__';
+    this.onPositionChange();
     this.step = 1;
     this.error = '';
     this.fieldErrors = {};
@@ -538,10 +562,46 @@ export class AdminServicesComponent implements OnInit {
 
   edit(s: ServiceItem) {
     this.editing = { ...s, formFields: Array.isArray(s.formFields) ? [...s.formFields] : [] };
+    this.syncPositionFromSortOrder();
     this.step = 1;
     this.error = '';
     this.fieldErrors = {};
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  onPositionChange() {
+    const others = this.items
+      .filter((s) => s.id && s.id !== this.editing.id)
+      .sort((a, b) => a.sortOrder - b.sortOrder);
+
+    if (this.positionAfter === '__first__') {
+      this.editing.sortOrder = others.length ? others[0].sortOrder - 1 : 0;
+      return;
+    }
+    if (this.positionAfter === '__last__') {
+      this.editing.sortOrder = others.length ? others[others.length - 1].sortOrder + 1 : 0;
+      return;
+    }
+    const afterId = this.positionAfter.replace('after:', '');
+    const idx = others.findIndex((s) => s.id === afterId);
+    if (idx === -1) return;
+    const after = others[idx];
+    this.editing.sortOrder = after.sortOrder + 1;
+  }
+
+  private syncPositionFromSortOrder() {
+    const sorted = [...this.items].sort((a, b) => a.sortOrder - b.sortOrder);
+    const idx = this.editing.id ? sorted.findIndex((s) => s.id === this.editing.id) : -1;
+
+    if (idx <= 0) {
+      this.positionAfter = '__first__';
+      return;
+    }
+    if (idx === sorted.length - 1) {
+      this.positionAfter = '__last__';
+      return;
+    }
+    this.positionAfter = `after:${sorted[idx - 1].id}`;
   }
 
   pickType(type: ServiceItemType) {
@@ -615,7 +675,10 @@ export class AdminServicesComponent implements OnInit {
         this.startNew();
       } else {
         const saved = this.items.find((i) => i.id === this.editing.id);
-        if (saved) this.editing = { ...saved, formFields: Array.isArray(saved.formFields) ? [...saved.formFields] : [] };
+        if (saved) {
+          this.editing = { ...saved, formFields: Array.isArray(saved.formFields) ? [...saved.formFields] : [] };
+          this.syncPositionFromSortOrder();
+        }
       }
       this.setActionMessage(isNew ? 'Service item created successfully.' : 'Service item updated successfully.');
     } catch (err: unknown) {

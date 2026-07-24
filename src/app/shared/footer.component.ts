@@ -49,7 +49,7 @@ import { NewsletterService } from '../core/newsletter.service';
               <div class="ftr__newsletter-badge">Newsletter</div>
               <h4 class="ftr__newsletter-title">Stay updated</h4>
               <p class="ftr__newsletter-desc">
-                New faces on the roster, or workshops &amp; community events — pick what you want.
+                Pick the updates you want — new faces on the roster, or model camps and workshops.
               </p>
 
               <form class="ftr__form" (ngSubmit)="subscribe()" *ngIf="!subscribed">
@@ -67,14 +67,14 @@ import { NewsletterService } from '../core/newsletter.service';
                 <div class="ftr__topic-actions">
                   <button type="button" class="ftr__topic-btn ftr__topic-btn--models"
                     [disabled]="loading || !email.trim()" (click)="subscribe('models')">
-                    <span class="ftr__topic-btn__label">Ille Models</span>
-                    <span class="ftr__topic-btn__hint">New talent</span>
+                    <span class="ftr__topic-btn__label">Models' Update</span>
+                    <span class="ftr__topic-btn__hint">Be the first to see our new faces</span>
                     <span class="ftr__topic-btn__state" *ngIf="loading && pendingTopic === 'models'">…</span>
                   </button>
                   <button type="button" class="ftr__topic-btn ftr__topic-btn--community"
                     [disabled]="loading || !email.trim()" (click)="subscribe('community')">
-                    <span class="ftr__topic-btn__label">Join Community</span>
-                    <span class="ftr__topic-btn__hint">Workshops &amp; events</span>
+                    <span class="ftr__topic-btn__label">Join our Community</span>
+                    <span class="ftr__topic-btn__hint">Be the first to know about our upcoming model camps and workshops</span>
                     <span class="ftr__topic-btn__state" *ngIf="loading && pendingTopic === 'community'">…</span>
                   </button>
                 </div>
@@ -244,7 +244,7 @@ import { NewsletterService } from '../core/newsletter.service';
       flex-direction: column;
       align-items: flex-start;
       gap: 4px;
-      min-height: 64px;
+      min-height: 72px;
       padding: 12px 12px 11px;
       border-radius: 2px;
       border: 1px solid var(--line-strong);
@@ -399,8 +399,8 @@ export class FooterComponent {
       await this.newsletter.subscribe(value, 'footer', topic);
       this.subscribed = true;
       this.subscribedMessage = topic === 'community'
-        ? "You're subscribed to community updates. Thank you."
-        : "You're subscribed to new Ille Models updates. Thank you.";
+        ? "You're subscribed — we'll keep you first to know about model camps and workshops."
+        : "You're subscribed to Models' Update. Thank you.";
       this.email = '';
     } catch {
       this.error = 'Could not subscribe. Please try again.';

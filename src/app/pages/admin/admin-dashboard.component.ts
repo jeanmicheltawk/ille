@@ -22,14 +22,18 @@ import {
 import { AdminServicesComponent } from './admin-services.component';
 import { AdminCategoriesComponent } from './admin-categories.component';
 import { AdminSubscribersComponent } from './admin-subscribers.component';
+import { AdminSiteFormEditorComponent } from './admin-site-form-editor.component';
 import { FileUploadComponent } from '../../shared/file-upload.component';
 import { CategoriesService } from '../../core/categories.service';
+import { SiteFormsService } from '../../core/site-forms.service';
+import { SiteFormConfig } from '../../core/models.types';
+import { displayTitleFromData } from '../../core/form-field.util';
 import { ToastService } from '../../shared/toast.service';
 
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, AdminServicesComponent, AdminCategoriesComponent, AdminSubscribersComponent, FileUploadComponent],
+  imports: [CommonModule, FormsModule, AdminServicesComponent, AdminCategoriesComponent, AdminSubscribersComponent, AdminSiteFormEditorComponent, FileUploadComponent],
   template: `
     <div class="container dash">
       <div class="dash__top">
@@ -86,6 +90,14 @@ import { ToastService } from '../../shared/toast.service';
 
       <!-- APPLICATIONS -->
       <section *ngIf="tab==='apps'">
+        <app-admin-site-form-editor
+          formId="become-a-model"
+          title="Edit Become a Model form"
+          [showRules]="true"
+          [allowFile]="true"
+          (saved)="onApplicationFormSaved($event)"
+        />
+
         <div class="forms-head">
           <div>
             <h3>Become a model applications ({{ apps.length }})</h3>
@@ -102,7 +114,7 @@ import { ToastService } from '../../shared/toast.service';
         <div class="form-card" *ngFor="let a of apps">
           <div class="form-card__head">
             <div>
-              <strong>{{ a.firstName }} {{ a.lastName }}</strong>
+              <strong>{{ appTitle(a) }}</strong>
               <span class="form-card__meta">{{ a.createdAt || 'Just now' }}</span>
             </div>
             <div class="form-card__actions">
@@ -112,16 +124,21 @@ import { ToastService } from '../../shared/toast.service';
             </div>
           </div>
           <dl class="form-card__data">
-            <div><dt>Email</dt><dd>{{ a.email }}</dd></div>
-            <div><dt>Phone</dt><dd>{{ a.phone }}</dd></div>
-            <div><dt>Instagram</dt><dd>{{ a.instagram }}</dd></div>
-            <div><dt>Height</dt><dd>{{ a.height }}</dd></div>
+            <div *ngFor="let entry of appPreview(a)">
+              <dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd>
+            </div>
           </dl>
         </div>
       </section>
 
       <!-- BOOKINGS -->
       <section *ngIf="tab==='bookings'">
+        <app-admin-site-form-editor
+          formId="book-a-model"
+          title="Edit Book a Model form"
+          (saved)="onBookingFormSaved($event)"
+        />
+
         <div class="forms-head">
           <div>
             <h3>Model booking enquiries ({{ bookings.length }})</h3>
@@ -138,7 +155,7 @@ import { ToastService } from '../../shared/toast.service';
         <div class="form-card" *ngFor="let b of bookings">
           <div class="form-card__head">
             <div>
-              <strong>{{ b.clientName }}</strong>
+              <strong>{{ bookingTitle(b) }}</strong>
               <span class="form-card__meta">{{ b.createdAt || 'Just now' }}</span>
             </div>
             <div class="form-card__actions">
@@ -148,10 +165,9 @@ import { ToastService } from '../../shared/toast.service';
             </div>
           </div>
           <dl class="form-card__data">
-            <div><dt>Job</dt><dd>{{ b.jobType }}</dd></div>
-            <div><dt>Dates</dt><dd>{{ b.dates }}</dd></div>
-            <div><dt>Location</dt><dd>{{ b.location }}</dd></div>
-            <div><dt>Email</dt><dd>{{ b.email }}</dd></div>
+            <div *ngFor="let entry of bookingPreview(b)">
+              <dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd>
+            </div>
           </dl>
         </div>
       </section>
@@ -693,6 +709,8 @@ export class AdminDashboardComponent implements OnInit {
   categories: ModelCategory[] = [];
   apps: ModelApplication[] = [];
   bookings: Booking[] = [];
+  applicationForm: SiteFormConfig | null = null;
+  bookingForm: SiteFormConfig | null = null;
   editing: Model = this.blank();
   configured = false;
   viewingForm: FormRecord | null = null;
@@ -706,6 +724,7 @@ export class AdminDashboardComponent implements OnInit {
     private modelsSvc: ModelsService,
     private categoriesSvc: CategoriesService,
     private subs: SubmissionsService,
+    private siteForms: SiteFormsService,
     private auth: AuthService,
     private router: Router,
     api: ApiService,
@@ -716,6 +735,8 @@ export class AdminDashboardComponent implements OnInit {
   async ngOnInit() {
     await this.refresh();
     await this.refreshCategories();
+    this.applicationForm = await this.siteForms.get('become-a-model');
+    this.bookingForm = await this.siteForms.get('book-a-model');
     this.apps = await this.subs.listApplications();
     this.bookings = await this.subs.listBookings();
   }
@@ -951,11 +972,11 @@ export class AdminDashboardComponent implements OnInit {
   }
 
   viewApp(app: ModelApplication) {
-    this.viewingForm = applicationToRecord(app);
+    this.viewingForm = applicationToRecord(app, this.applicationForm?.formFields);
   }
 
   viewBooking(booking: Booking) {
-    this.viewingForm = bookingToRecord(booking);
+    this.viewingForm = bookingToRecord(booking, this.bookingForm?.formFields);
   }
 
   closeFormView() {
@@ -971,35 +992,76 @@ export class AdminDashboardComponent implements OnInit {
   }
 
   exportAppPdf(app: ModelApplication) {
-    downloadFormPdf(applicationToRecord(app));
+    downloadFormPdf(applicationToRecord(app, this.applicationForm?.formFields));
   }
 
   exportAppExcel(app: ModelApplication) {
-    downloadFormExcel(applicationToRecord(app));
+    downloadFormExcel(applicationToRecord(app, this.applicationForm?.formFields));
   }
 
   exportBookingPdf(booking: Booking) {
-    downloadFormPdf(bookingToRecord(booking));
+    downloadFormPdf(bookingToRecord(booking, this.bookingForm?.formFields));
   }
 
   exportBookingExcel(booking: Booking) {
-    downloadFormExcel(bookingToRecord(booking));
+    downloadFormExcel(bookingToRecord(booking, this.bookingForm?.formFields));
   }
 
   exportAllAppsPdf() {
-    downloadAllFormsPdf(this.apps.map(applicationToRecord), 'model-applications-all');
+    downloadAllFormsPdf(
+      this.apps.map((app) => applicationToRecord(app, this.applicationForm?.formFields)),
+      'model-applications-all',
+    );
   }
 
   exportAllAppsExcel() {
-    downloadAllFormsExcel(this.apps.map(applicationToRecord), 'model-applications-all');
+    downloadAllFormsExcel(
+      this.apps.map((app) => applicationToRecord(app, this.applicationForm?.formFields)),
+      'model-applications-all',
+    );
   }
 
   exportAllBookingsPdf() {
-    downloadAllFormsPdf(this.bookings.map(bookingToRecord), 'model-bookings-all');
+    downloadAllFormsPdf(
+      this.bookings.map((booking) => bookingToRecord(booking, this.bookingForm?.formFields)),
+      'model-bookings-all',
+    );
   }
 
   exportAllBookingsExcel() {
-    downloadAllFormsExcel(this.bookings.map(bookingToRecord), 'model-bookings-all');
+    downloadAllFormsExcel(
+      this.bookings.map((booking) => bookingToRecord(booking, this.bookingForm?.formFields)),
+      'model-bookings-all',
+    );
+  }
+
+  onApplicationFormSaved(config: SiteFormConfig) {
+    this.applicationForm = config;
+  }
+
+  onBookingFormSaved(config: SiteFormConfig) {
+    this.bookingForm = config;
+  }
+
+  appTitle(app: ModelApplication): string {
+    const data = { ...(app.data || {}) };
+    if (app.firstName) data.firstName = data.firstName || app.firstName;
+    if (app.lastName) data.lastName = data.lastName || app.lastName;
+    return displayTitleFromData(data, 'Model Application');
+  }
+
+  bookingTitle(booking: Booking): string {
+    const data = { ...(booking.data || {}) };
+    if (booking.clientName) data.clientName = data.clientName || booking.clientName;
+    return displayTitleFromData(data, 'Model Booking');
+  }
+
+  appPreview(app: ModelApplication) {
+    return applicationToRecord(app, this.applicationForm?.formFields).entries.slice(0, 4);
+  }
+
+  bookingPreview(booking: Booking) {
+    return bookingToRecord(booking, this.bookingForm?.formFields).entries.slice(0, 4);
   }
 
   async logout() {

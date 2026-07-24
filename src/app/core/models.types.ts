@@ -59,33 +59,37 @@ export interface Model {
 
 export interface ModelApplication {
   id?: string;
-  firstName: string;
-  lastName: string;
-  dateOfBirth: string;
-  email: string;
-  phone: string;
-  instagram: string;
-  height: number;
+  firstName?: string;
+  lastName?: string;
+  dateOfBirth?: string;
+  email?: string;
+  phone?: string;
+  instagram?: string;
+  height?: number;
   // On submit these become uploaded-file URLs returned by the backend.
   fullShotUrl?: string;
   halfShotUrl?: string;
   closeupShotUrl?: string;
   profileShotUrl?: string;
+  /** All answered fields (including custom ones). */
+  data?: Record<string, string>;
   createdAt?: string;
 }
 
 export interface Booking {
   id?: string;
   modelId?: string;       // optional: a specific model, or general enquiry
-  clientName: string;
+  clientName?: string;
   company?: string;
-  email: string;
-  phone: string;
-  jobType: string;        // editorial, campaign, runway, e-commerce...
-  dates: string;
-  location: string;
+  email?: string;
+  phone?: string;
+  jobType?: string;        // editorial, campaign, runway, e-commerce...
+  dates?: string;
+  location?: string;
   budget?: string;
-  message: string;
+  message?: string;
+  /** All answered fields (including custom ones). */
+  data?: Record<string, string>;
   createdAt?: string;
 }
 
@@ -107,6 +111,8 @@ export type ServiceFieldType =
   | 'date'
   | 'time'
   | 'datetime'
+  | 'number'
+  | 'file'
   | 'info';
 
 export interface ServiceFormField {
@@ -120,6 +126,15 @@ export interface ServiceFormField {
   rowGroup?: string;
   sortOrder: number;
   required: boolean;
+}
+
+export type SiteFormId = 'become-a-model' | 'book-a-model';
+
+export interface SiteFormConfig {
+  id: SiteFormId;
+  rules: string[];
+  submitLabel: string;
+  formFields: ServiceFormField[];
 }
 
 export interface ServiceItem {

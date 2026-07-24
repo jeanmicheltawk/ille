@@ -76,13 +76,13 @@ async function sendWelcome(email, token, topic = 'models') {
     <p>Thank you for subscribing to ille updates.</p>
     <p>${
       isCommunity
-        ? "You'll hear from us when we publish new workshops and services."
-        : "You'll hear from us when we add new faces to our roster."
+        ? "You'll be the first to know about our upcoming model camps and workshops."
+        : "You'll be the first to see our new faces."
     }</p>
   `, token);
   const text = isCommunity
-    ? 'Thank you for subscribing to ille updates.\n\nYou\'ll hear from us when we publish new workshops and services.'
-    : 'Thank you for subscribing to ille updates.\n\nYou\'ll hear from us when we add new models to our roster.';
+    ? 'Thank you for subscribing to ille updates.\n\nYou\'ll be the first to know about our upcoming model camps and workshops.'
+    : 'Thank you for subscribing to ille updates.\n\nYou\'ll be the first to see our new faces.';
   return sendMail({ to: email, subject, html, text });
 }
 

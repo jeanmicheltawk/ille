@@ -18,7 +18,7 @@ import { EmailSubscriber } from '../../core/models.types';
             <code>SMTP_*</code> env vars on the server.
           </p>
           <p class="muted" *ngIf="emailConfigured">
-            New published models trigger an automatic email for Ille Models subscribers.
+            New published models trigger an automatic email for Models' Update subscribers.
             Use the filter and form below to send custom messages to each list.
           </p>
         </div>
@@ -31,12 +31,12 @@ import { EmailSubscriber } from '../../core/models.types';
             </button>
             <button type="button" class="topic-toggle__btn" [class.is-active]="topicFilter === 'models'"
               (click)="setTopicFilter('models')">
-              <span>Ille Models</span>
+              <span>Models' Update</span>
               <em>{{ countLabel('models') }}</em>
             </button>
             <button type="button" class="topic-toggle__btn" [class.is-active]="topicFilter === 'community'"
               (click)="setTopicFilter('community')">
-              <span>Community</span>
+              <span>Join our Community</span>
               <em>{{ countLabel('community') }}</em>
             </button>
           </div>
@@ -335,9 +335,9 @@ export class AdminSubscribersComponent implements OnInit {
   }
 
   topicLabel(topic?: string) {
-    if (topic === 'community') return 'Community';
+    if (topic === 'community') return 'Join our Community';
     if (topic === 'all') return 'All';
-    return 'Ille Models';
+    return "Models' Update";
   }
 
   countLabel(topic: 'all' | SubscriberTopic) {

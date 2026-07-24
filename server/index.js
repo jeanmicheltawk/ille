@@ -16,6 +16,9 @@ const {
   submissionFromRow,
   categoryFromRow,
   subscriberFromRow,
+  siteFormFromRow,
+  applicationFromRow,
+  bookingFromRow,
 } = require('./db');
 const email = require('./email');
 const {
@@ -436,71 +439,173 @@ function serializeModel(m) {
 }
 
 // ============================================================
-// APPLICATIONS (become a model) — public, multipart with 4 photos
+// APPLICATION / BOOKING EXTRAS (dynamic field payloads)
 // ============================================================
-const shotFields = upload.fields([
-  { name: 'fullShot', maxCount: 1 },
-  { name: 'halfShot', maxCount: 1 },
-  { name: 'closeupShot', maxCount: 1 },
-  { name: 'profileShot', maxCount: 1 },
-]);
+async function loadApplicationExtras(ids) {
+  const map = new Map();
+  if (!ids.length) return map;
+  const { rows } = await query(
+    'SELECT application_id, data FROM application_extras WHERE application_id = ANY($1)',
+    [ids],
+  );
+  for (const row of rows) map.set(row.application_id, row.data);
+  return map;
+}
 
-app.post('/api/applications', shotFields, async (req, res) => {
-  const b = req.body;
-  const f = req.files || {};
-  const pick = async (k) => (f[k]?.[0] ? storeFile(query, f[k][0]) : null);
-  await query(`
+async function saveApplicationExtras(applicationId, data) {
+  await query(
+    `INSERT INTO application_extras (application_id, data) VALUES ($1, $2)
+     ON CONFLICT (application_id) DO UPDATE SET data = EXCLUDED.data`,
+    [applicationId, JSON.stringify(data || {})],
+  );
+}
+
+async function loadBookingExtras(ids) {
+  const map = new Map();
+  if (!ids.length) return map;
+  const { rows } = await query(
+    'SELECT booking_id, data FROM booking_extras WHERE booking_id = ANY($1)',
+    [ids],
+  );
+  for (const row of rows) map.set(row.booking_id, row.data);
+  return map;
+}
+
+async function saveBookingExtras(bookingId, data) {
+  await query(
+    `INSERT INTO booking_extras (booking_id, data) VALUES ($1, $2)
+     ON CONFLICT (booking_id) DO UPDATE SET data = EXCLUDED.data`,
+    [bookingId, JSON.stringify(data || {})],
+  );
+}
+
+// ============================================================
+// SITE FORMS — public config + admin edit
+// ============================================================
+const SITE_FORM_IDS = new Set(['become-a-model', 'book-a-model']);
+
+async function getSiteForm(id) {
+  const { rows } = await query('SELECT * FROM site_forms WHERE id = $1', [id]);
+  return siteFormFromRow(rows[0]);
+}
+
+app.get('/api/forms/:id', async (req, res) => {
+  if (!SITE_FORM_IDS.has(req.params.id)) {
+    return res.status(404).json({ error: 'Form not found' });
+  }
+  const form = await getSiteForm(req.params.id);
+  if (!form) return res.status(404).json({ error: 'Form not found' });
+  res.json(form);
+});
+
+app.get('/api/admin/forms/:id', requireAuth, async (req, res) => {
+  if (!SITE_FORM_IDS.has(req.params.id)) {
+    return res.status(404).json({ error: 'Form not found' });
+  }
+  const form = await getSiteForm(req.params.id);
+  if (!form) return res.status(404).json({ error: 'Form not found' });
+  res.json(form);
+});
+
+app.put('/api/admin/forms/:id', requireAuth, async (req, res) => {
+  if (!SITE_FORM_IDS.has(req.params.id)) {
+    return res.status(404).json({ error: 'Form not found' });
+  }
+  const body = req.body || {};
+  const rules = Array.isArray(body.rules) ? body.rules : [];
+  const formFields = Array.isArray(body.formFields) ? body.formFields : [];
+  const submitLabel = (body.submitLabel || 'Submit').toString().trim() || 'Submit';
+  await query(
+    `INSERT INTO site_forms (id, rules, "formFields", "submitLabel", "updatedAt")
+     VALUES ($1, $2, $3, $4, NOW())
+     ON CONFLICT (id) DO UPDATE SET
+       rules = EXCLUDED.rules,
+       "formFields" = EXCLUDED."formFields",
+       "submitLabel" = EXCLUDED."submitLabel",
+       "updatedAt" = NOW()`,
+    [req.params.id, JSON.stringify(rules), JSON.stringify(formFields), submitLabel],
+  );
+  res.json({ ok: true });
+});
+
+// ============================================================
+// APPLICATIONS (become a model) — public, multipart with dynamic fields
+// ============================================================
+const applicationUpload = upload.any();
+
+app.post('/api/applications', applicationUpload, async (req, res) => {
+  const b = req.body || {};
+  const files = Array.isArray(req.files) ? req.files : [];
+  const data = { ...b };
+  delete data.modelId;
+
+  for (const file of files) {
+    if (file?.fieldname) {
+      data[file.fieldname] = await storeFile(query, file);
+    }
+  }
+
+  const { rows } = await query(`
     INSERT INTO applications ("firstName", "lastName", "dateOfBirth", email, phone,
       instagram, height, "fullShotUrl", "halfShotUrl", "closeupShotUrl", "profileShotUrl")
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    RETURNING id
   `, [
-    b.firstName,
-    b.lastName || null,
-    b.dateOfBirth || null,
-    b.email,
-    b.phone || null,
-    b.instagram || null,
-    b.height ? Number(b.height) : null,
-    await pick('fullShot'),
-    await pick('halfShot'),
-    await pick('closeupShot'),
-    await pick('profileShot'),
+    data.firstName || null,
+    data.lastName || null,
+    data.dateOfBirth || null,
+    data.email || null,
+    data.phone || null,
+    data.instagram || null,
+    data.height ? Number(data.height) : null,
+    data.fullShot || null,
+    data.halfShot || null,
+    data.closeupShot || null,
+    data.profileShot || null,
   ]);
+  await saveApplicationExtras(rows[0].id, data);
   res.json({ ok: true });
 });
 
 app.get('/api/admin/applications', requireAuth, async (req, res) => {
   const { rows } = await query('SELECT * FROM applications ORDER BY "createdAt" DESC');
-  res.json(rows);
+  const extras = await loadApplicationExtras(rows.map((row) => row.id));
+  res.json(rows.map((row) => applicationFromRow(row, extras.get(row.id))));
 });
 
 // ============================================================
-// BOOKINGS — public JSON
+// BOOKINGS — public JSON with dynamic fields
 // ============================================================
 app.post('/api/bookings', async (req, res) => {
-  const b = req.body;
-  await query(`
+  const b = req.body || {};
+  const data = { ...(b.data && typeof b.data === 'object' ? b.data : b) };
+  if (b.modelId) data.modelId = b.modelId;
+
+  const { rows } = await query(`
     INSERT INTO bookings ("modelId", "clientName", company, email, phone,
       "jobType", dates, location, budget, message)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    RETURNING id
   `, [
-    b.modelId || null,
-    b.clientName,
-    b.company || null,
-    b.email,
-    b.phone || null,
-    b.jobType || null,
-    b.dates || null,
-    b.location || null,
-    b.budget || null,
-    b.message || null,
+    data.modelId || null,
+    data.clientName || null,
+    data.company || null,
+    data.email || null,
+    data.phone || null,
+    data.jobType || null,
+    data.dates || null,
+    data.location || null,
+    data.budget || null,
+    data.message || null,
   ]);
+  await saveBookingExtras(rows[0].id, data);
   res.json({ ok: true });
 });
 
 app.get('/api/admin/bookings', requireAuth, async (req, res) => {
   const { rows } = await query('SELECT * FROM bookings ORDER BY "createdAt" DESC');
-  res.json(rows);
+  const extras = await loadBookingExtras(rows.map((row) => row.id));
+  res.json(rows.map((row) => bookingFromRow(row, extras.get(row.id))));
 });
 
 // ============================================================

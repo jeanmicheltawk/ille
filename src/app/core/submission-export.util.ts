@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
-import { Booking, ModelApplication, ServiceSubmission } from './models.types';
+import { Booking, ModelApplication, ServiceFormField, ServiceSubmission } from './models.types';
+import { displayTitleFromData, submissionEntriesFromData } from './form-field.util';
 
 export interface SubmissionEntry {
   label: string;
@@ -99,43 +100,80 @@ export function serviceSubmissionToRecord(
   };
 }
 
-export function applicationToRecord(app: ModelApplication): FormRecord {
-  const entries: SubmissionEntry[] = [
-    { label: 'First Name', value: app.firstName },
-    { label: 'Last Name', value: app.lastName },
-    { label: 'Date of Birth', value: app.dateOfBirth },
-    { label: 'Email', value: app.email },
-    { label: 'Phone', value: app.phone },
-    { label: 'Instagram', value: app.instagram },
-    { label: 'Height', value: app.height ? String(app.height) : '' },
-    { label: 'Full Shot', value: app.fullShotUrl ?? '' },
-    { label: 'Half Shot', value: app.halfShotUrl ?? '' },
-    { label: 'Close-up Shot', value: app.closeupShotUrl ?? '' },
-    { label: 'Profile Shot', value: app.profileShotUrl ?? '' },
-  ].filter((entry) => entry.value);
+function applicationData(app: ModelApplication): Record<string, string> {
+  const data: Record<string, string> = { ...(app.data || {}) };
+  if (app.firstName) data.firstName = data.firstName || app.firstName;
+  if (app.lastName) data.lastName = data.lastName || app.lastName;
+  if (app.dateOfBirth) data.dateOfBirth = data.dateOfBirth || app.dateOfBirth;
+  if (app.email) data.email = data.email || app.email;
+  if (app.phone) data.phone = data.phone || app.phone;
+  if (app.instagram) data.instagram = data.instagram || app.instagram;
+  if (app.height) data.height = data.height || String(app.height);
+  if (app.fullShotUrl) data.fullShot = data.fullShot || app.fullShotUrl;
+  if (app.halfShotUrl) data.halfShot = data.halfShot || app.halfShotUrl;
+  if (app.closeupShotUrl) data.closeupShot = data.closeupShot || app.closeupShotUrl;
+  if (app.profileShotUrl) data.profileShot = data.profileShot || app.profileShotUrl;
+  return data;
+}
+
+function bookingData(booking: Booking): Record<string, string> {
+  const data: Record<string, string> = { ...(booking.data || {}) };
+  if (booking.clientName) data.clientName = data.clientName || booking.clientName;
+  if (booking.company) data.company = data.company || booking.company;
+  if (booking.email) data.email = data.email || booking.email;
+  if (booking.phone) data.phone = data.phone || booking.phone;
+  if (booking.jobType) data.jobType = data.jobType || booking.jobType;
+  if (booking.dates) data.dates = data.dates || booking.dates;
+  if (booking.location) data.location = data.location || booking.location;
+  if (booking.budget) data.budget = data.budget || booking.budget;
+  if (booking.message) data.message = data.message || booking.message;
+  if (booking.modelId) data.modelId = data.modelId || booking.modelId;
+  return data;
+}
+
+export function applicationToRecord(app: ModelApplication, fields?: ServiceFormField[]): FormRecord {
+  const data = applicationData(app);
+  const entries = fields?.length
+    ? submissionEntriesFromData(data, fields)
+    : [
+      { label: 'First Name', value: data.firstName ?? '' },
+      { label: 'Last Name', value: data.lastName ?? '' },
+      { label: 'Date of Birth', value: data.dateOfBirth ?? '' },
+      { label: 'Email', value: data.email ?? '' },
+      { label: 'Phone', value: data.phone ?? '' },
+      { label: 'Instagram', value: data.instagram ?? '' },
+      { label: 'Height', value: data.height ?? '' },
+      { label: 'Full Shot', value: data.fullShot ?? '' },
+      { label: 'Half Shot', value: data.halfShot ?? '' },
+      { label: 'Close-up Shot', value: data.closeupShot ?? '' },
+      { label: 'Profile Shot', value: data.profileShot ?? '' },
+    ].filter((entry) => entry.value);
   return {
-    title: `${app.firstName} ${app.lastName}`.trim() || 'Model Application',
+    title: displayTitleFromData(data, 'Model Application'),
     submittedAt: app.createdAt,
     id: app.id,
     entries,
   };
 }
 
-export function bookingToRecord(booking: Booking): FormRecord {
-  const entries: SubmissionEntry[] = [
-    { label: 'Client Name', value: booking.clientName },
-    { label: 'Company', value: booking.company ?? '' },
-    { label: 'Email', value: booking.email },
-    { label: 'Phone', value: booking.phone },
-    { label: 'Job Type', value: booking.jobType },
-    { label: 'Dates', value: booking.dates },
-    { label: 'Location', value: booking.location },
-    { label: 'Budget', value: booking.budget ?? '' },
-    { label: 'Model ID', value: booking.modelId ?? '' },
-    { label: 'Message', value: booking.message },
-  ].filter((entry) => entry.value);
+export function bookingToRecord(booking: Booking, fields?: ServiceFormField[]): FormRecord {
+  const data = bookingData(booking);
+  const entries = fields?.length
+    ? submissionEntriesFromData(data, fields)
+    : [
+      { label: 'Client Name', value: data.clientName ?? '' },
+      { label: 'Company', value: data.company ?? '' },
+      { label: 'Email', value: data.email ?? '' },
+      { label: 'Phone', value: data.phone ?? '' },
+      { label: 'Job Type', value: data.jobType ?? '' },
+      { label: 'Dates', value: data.dates ?? '' },
+      { label: 'Location', value: data.location ?? '' },
+      { label: 'Budget', value: data.budget ?? '' },
+      { label: 'Model ID', value: data.modelId ?? '' },
+      { label: 'Message', value: data.message ?? '' },
+    ].filter((entry) => entry.value);
   return {
-    title: booking.clientName || 'Model Booking',
+    title: displayTitleFromData(data, 'Model Booking'),
     submittedAt: booking.createdAt,
     id: booking.id,
     entries,

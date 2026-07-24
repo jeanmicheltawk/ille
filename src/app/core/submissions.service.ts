@@ -2,40 +2,45 @@ import { Injectable } from '@angular/core';
 import { ApiService } from './api.service';
 import { Booking, ModelApplication } from './models.types';
 
-export type ShotKey = 'fullShot' | 'halfShot' | 'closeupShot' | 'profileShot';
-
 /**
- * Public write flows: model applications (with 4 photos) and bookings.
+ * Public write flows: model applications (with optional photos) and bookings.
  * Plus admin reads of both. Mock path just logs to the console.
  */
 @Injectable({ providedIn: 'root' })
 export class SubmissionsService {
   constructor(private api: ApiService) {}
 
-  async submitApplication(app: ModelApplication, files: Partial<Record<ShotKey, File>>): Promise<void> {
+  async submitApplication(
+    values: Record<string, string>,
+    files: Record<string, File> = {},
+  ): Promise<void> {
     if (this.api.useApi) {
       const form = new FormData();
-      form.append('firstName', app.firstName);
-      form.append('lastName', app.lastName ?? '');
-      form.append('dateOfBirth', app.dateOfBirth ?? '');
-      form.append('email', app.email);
-      form.append('phone', app.phone ?? '');
-      form.append('instagram', app.instagram ?? '');
-      form.append('height', String(app.height ?? ''));
-      (['fullShot', 'halfShot', 'closeupShot', 'profileShot'] as ShotKey[]).forEach((k) => {
-        const f = files[k];
-        if (f) form.append(k, f, f.name);
-      });
+      for (const [key, value] of Object.entries(values)) {
+        if (value != null) form.append(key, value);
+      }
+      for (const [key, file] of Object.entries(files)) {
+        form.append(key, file, file.name);
+      }
       await this.api.upload('/applications', form);
       return;
     }
-    console.info('[mock] application received:', app, files);
+    console.info('[mock] application received:', values, files);
     await this.delay(600);
   }
 
-  async submitBooking(booking: Booking): Promise<void> {
-    if (this.api.useApi) { await this.api.post('/bookings', booking); return; }
-    console.info('[mock] booking received:', booking);
+  async submitBooking(booking: Booking, values?: Record<string, string>): Promise<void> {
+    const payload = values || booking.data || {};
+    const body = {
+      modelId: booking.modelId,
+      data: payload,
+      ...payload,
+    };
+    if (this.api.useApi) {
+      await this.api.post('/bookings', body);
+      return;
+    }
+    console.info('[mock] booking received:', body);
     await this.delay(600);
   }
 
