@@ -12,6 +12,7 @@ import {
   serviceSubmissionToRecord,
   SubmissionEntry,
 } from '../../core/submission-export.util';
+import { buildServiceSections } from '../../core/service-sections.util';
 import { ServiceFormBuilderComponent } from './service-form-builder.component';
 import { ToastService } from '../../shared/toast.service';
 
@@ -20,6 +21,11 @@ interface TypeOption {
   title: string;
   desc: string;
   example: string;
+}
+
+interface ListGroup {
+  label: string;
+  items: ServiceItem[];
 }
 
 @Component({
@@ -31,7 +37,11 @@ interface TypeOption {
       <!-- Intro -->
       <div class="intro">
         <h2>Services page</h2>
-        <p>Manage what appears on the <strong>/services</strong> page — events, programs, offerings, and booking forms.</p>
+        <p>
+          Manage what appears on the <strong>/services</strong> page.
+          Stack services as blocks: <em>Book / promo link → Section heading → Service line items</em>.
+          Add another promo (or heading) after the list to start a new block.
+        </p>
       </div>
 
       <div class="svc-admin__grid">
@@ -42,16 +52,19 @@ interface TypeOption {
             <button type="button" class="btn btn--ghost btn--sm" (click)="startNew()">+ New</button>
           </div>
 
-          <div class="list-item" *ngFor="let s of items"
-               [class.list-item--active]="editing.id === s.id"
-               (click)="edit(s)">
-            <div class="list-item__top">
-              <span class="list-item__type">{{ typeName(s.type) }}</span>
-              <span class="list-item__badge" *ngIf="s.formEnabled">Bookable</span>
-              <span class="list-item__badge list-item__badge--hide" *ngIf="!s.published">Hidden</span>
+          <div class="list-group" *ngFor="let group of listGroups">
+            <div class="list-group__label">{{ group.label }}</div>
+            <div class="list-item" *ngFor="let s of group.items"
+                 [class.list-item--active]="editing.id === s.id"
+                 (click)="edit(s)">
+              <div class="list-item__top">
+                <span class="list-item__type">{{ typeName(s.type) }}</span>
+                <span class="list-item__badge" *ngIf="s.formEnabled">Bookable</span>
+                <span class="list-item__badge list-item__badge--hide" *ngIf="!s.published">Hidden</span>
+              </div>
+              <strong>{{ s.title }}</strong>
+              <em *ngIf="s.subtitle">{{ s.subtitle }}</em>
             </div>
-            <strong>{{ s.title }}</strong>
-            <em *ngIf="s.subtitle">{{ s.subtitle }}</em>
           </div>
         </aside>
 
@@ -111,7 +124,10 @@ interface TypeOption {
                   <textarea name="desc" rows="3" [(ngModel)]="editing.description"></textarea>
                 </div>
                 <div class="field">
-                  <label>Position on page <span class="tip">Choose where this appears relative to other items</span></label>
+                  <label>
+                    Position on page
+                    <span class="tip">Order shapes blocks: promo → heading → line items, then repeat for the next block</span>
+                  </label>
                   <select name="position" [(ngModel)]="positionAfter" (ngModelChange)="onPositionChange()">
                     <option *ngFor="let opt of positionOptions" [value]="opt.value">{{ opt.label }}</option>
                   </select>
@@ -232,6 +248,7 @@ interface TypeOption {
     .intro { margin-bottom: 28px; }
     .intro h2 { font-size: 20px; font-weight: 200; margin: 0 0 8px; }
     .intro p { font-size: 14px; color: var(--ink-soft); margin: 0; font-weight: 200; line-height: 1.6; }
+    .intro em { font-style: normal; color: var(--ink); }
     .svc-admin__grid {
       display: grid; grid-template-columns: 280px 1fr; gap: 20px;
       align-items: start;
@@ -245,6 +262,15 @@ interface TypeOption {
       padding: 14px 16px; border-bottom: 1px solid var(--line);
       font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase;
       color: var(--ink-muted);
+    }
+    .list-group__label {
+      padding: 12px 16px 8px;
+      font-size: 9px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--accent);
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.02);
     }
     .btn--sm { padding: 8px 14px; font-size: 9px; }
     .list-item {
@@ -486,18 +512,43 @@ export class AdminServicesComponent implements OnInit {
   positionAfter = '__last__';
 
   typeOptions: TypeOption[] = [
-    { value: 'events_heading', title: 'Section heading', desc: 'A title that groups content, like "Upcoming Events".', example: 'Upcoming Events' },
+    { value: 'events_heading', title: 'Events heading', desc: 'Title above events and programs (top of the page).', example: 'Upcoming Events' },
     { value: 'event', title: 'Event', desc: 'A single upcoming event card.', example: 'Summer showcase' },
     { value: 'program', title: 'Program', desc: 'A featured program with optional status badge.', example: 'Model Camp' },
-    { value: 'promo', title: 'Book / promo link', desc: 'A call-to-action clients can click or book.', example: 'Book consultation' },
-    { value: 'services_heading', title: 'Section heading', desc: 'A title for the services list.', example: 'Discover our services' },
-    { value: 'offering', title: 'Service line item', desc: 'One service in the list (Posing, Catwalk…).', example: 'Posing' },
+    { value: 'promo', title: 'Book / promo link', desc: 'Starts a services block. Place before a heading + line items; add another promo later to start a new block.', example: 'Book consultation' },
+    { value: 'services_heading', title: 'Services heading', desc: 'Title for a services list block (sits under its promo link).', example: 'Discover our services' },
+    { value: 'offering', title: 'Service line item', desc: 'One row in the services list for the block above it.', example: 'Posing' },
   ];
 
   constructor(private services: ServicesService) {}
 
   async ngOnInit() {
     await this.reload();
+  }
+
+  get listGroups(): ListGroup[] {
+    const sorted = [...this.items].sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title));
+    const groups: ListGroup[] = [];
+
+    const eventsItems = sorted.filter((s) =>
+      s.type === 'events_heading' || s.type === 'event' || s.type === 'program'
+    );
+    if (eventsItems.length) {
+      groups.push({ label: 'Events & programs', items: eventsItems });
+    }
+
+    buildServiceSections(sorted).forEach((section, index) => {
+      const items = [
+        ...section.promos,
+        ...(section.heading ? [section.heading] : []),
+        ...section.offerings,
+      ];
+      if (items.length) {
+        groups.push({ label: `Services block ${index + 1}`, items });
+      }
+    });
+
+    return groups;
   }
 
   get canHaveForm(): boolean {

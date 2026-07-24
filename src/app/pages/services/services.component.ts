@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { ServicesService } from '../../core/services.service';
 import { ServiceItem } from '../../core/models.types';
+import { buildServiceSections, ServiceSectionBlock } from '../../core/service-sections.util';
 
 @Component({
   selector: 'app-services',
@@ -15,7 +16,7 @@ import { ServiceItem } from '../../core/models.types';
     </div>
 
     <div class="container page" *ngIf="!loading">
-      <section class="block" *ngIf="eventsHeading || events.length || programs.length || promosBefore.length">
+      <section class="block" *ngIf="eventsHeading || events.length || programs.length">
         <h2 class="block__title" *ngIf="eventsHeading">{{ eventsHeading.title }}</h2>
 
         <div class="events">
@@ -33,20 +34,22 @@ import { ServiceItem } from '../../core/models.types';
             </div>
             <span *ngIf="p.badge" class="program-card__badge">{{ p.badge }}</span>
           </article>
+        </div>
+      </section>
 
+      <section class="block" *ngFor="let section of serviceSections">
+        <div class="section-promos" *ngIf="section.promos.length">
           <a
-            *ngFor="let p of promosBefore"
+            *ngFor="let p of section.promos"
             [routerLink]="bookUrl(p)"
             class="inline-cta"
           >{{ p.title }}</a>
         </div>
-      </section>
 
-      <section class="block" *ngIf="servicesHeading || offerings.length">
-        <h2 class="block__title" *ngIf="servicesHeading">{{ servicesHeading.title }}</h2>
+        <h2 class="block__title" *ngIf="section.heading">{{ section.heading.title }}</h2>
 
-        <ul class="offerings" *ngIf="offerings.length">
-          <li *ngFor="let o of offerings; let i = index" class="offering rise" [style.animation-delay]="(i * 0.06) + 's'">
+        <ul class="offerings" *ngIf="section.offerings.length">
+          <li *ngFor="let o of section.offerings; let i = index" class="offering rise" [style.animation-delay]="(i * 0.06) + 's'">
             <a *ngIf="o.formEnabled" [routerLink]="bookUrl(o)" class="offering__link">
               <span class="offering__line"></span>
               <span class="offering__text">{{ o.title }}</span>
@@ -57,12 +60,6 @@ import { ServiceItem } from '../../core/models.types';
             </ng-container>
           </li>
         </ul>
-      </section>
-
-      <section class="block block--cta" *ngIf="consultationCta">
-        <a [routerLink]="bookUrl(consultationCta)" class="btn">
-          {{ consultationCta.ctaLabel || 'Submit' }}
-        </a>
       </section>
     </div>
 
@@ -82,6 +79,14 @@ import { ServiceItem } from '../../core/models.types';
       color: var(--ink-muted);
       text-align: center;
       margin-bottom: 40px;
+    }
+    .section-promos {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 48px;
+      text-align: center;
     }
     .events {
       display: flex; flex-direction: column; align-items: center;
@@ -144,7 +149,6 @@ import { ServiceItem } from '../../core/models.types';
       font-weight: 200; letter-spacing: 0.1em; text-transform: capitalize;
     }
     .offering__link:hover .offering__text { color: var(--accent); }
-    .block--cta { text-align: center; padding-top: 20px; }
     .muted {
       color: var(--ink-muted); padding: 40px 0 80px;
       font-weight: 200; text-align: center;
@@ -154,12 +158,9 @@ import { ServiceItem } from '../../core/models.types';
 export class ServicesComponent implements OnInit {
   loading = true;
   eventsHeading: ServiceItem | null = null;
-  servicesHeading: ServiceItem | null = null;
   events: ServiceItem[] = [];
   programs: ServiceItem[] = [];
-  promosBefore: ServiceItem[] = [];
-  offerings: ServiceItem[] = [];
-  consultationCta: ServiceItem | null = null;
+  serviceSections: ServiceSectionBlock[] = [];
 
   constructor(private services: ServicesService) {}
 
@@ -170,13 +171,9 @@ export class ServicesComponent implements OnInit {
   async ngOnInit() {
     const items = await this.services.listPublished();
     this.eventsHeading = items.find((s) => s.type === 'events_heading') ?? null;
-    this.servicesHeading = items.find((s) => s.type === 'services_heading') ?? null;
     this.events = items.filter((s) => s.type === 'event');
     this.programs = items.filter((s) => s.type === 'program');
-    this.offerings = items.filter((s) => s.type === 'offering');
-    const promos = items.filter((s) => s.type === 'promo');
-    this.promosBefore = promos.slice(0, -1);
-    this.consultationCta = promos.at(-1) ?? null;
+    this.serviceSections = buildServiceSections(items);
     this.loading = false;
   }
 }
