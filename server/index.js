@@ -565,6 +565,9 @@ app.post('/api/applications', applicationUpload, async (req, res) => {
   ]);
   await saveApplicationExtras(rows[0].id, data);
   res.json({ ok: true });
+  email.sendApplicationNotification(data).catch((err) =>
+    console.error('[email] application notification failed:', err),
+  );
 });
 
 app.get('/api/admin/applications', requireAuth, async (req, res) => {
@@ -600,6 +603,9 @@ app.post('/api/bookings', async (req, res) => {
   ]);
   await saveBookingExtras(rows[0].id, data);
   res.json({ ok: true });
+  email.sendBookingNotification(data).catch((err) =>
+    console.error('[email] booking notification failed:', err),
+  );
 });
 
 app.get('/api/admin/bookings', requireAuth, async (req, res) => {

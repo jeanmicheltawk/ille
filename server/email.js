@@ -104,6 +104,67 @@ async function sendBroadcast(email, token, subject, message) {
   return sendMail({ to: email, subject, html, text });
 }
 
+async function sendBookingNotification(booking) {
+  const to = process.env.BOOKINGS_NOTIFY_EMAIL || 'bookings@ille.co';
+  const subject = `New booking enquiry — ${booking.clientName || 'Unknown'}`;
+  const rows = [
+    ['Client', booking.clientName],
+    ['Company', booking.company],
+    ['Email', booking.email],
+    ['Phone', booking.phone],
+    ['Job Type', booking.jobType],
+    ['Location', booking.location],
+    ['Dates', booking.dates],
+    ['Budget', booking.budget],
+    ['Model ID', booking.modelId],
+    ['Message', booking.message],
+  ]
+    .filter(([, v]) => v)
+    .map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;font-weight:bold;vertical-align:top;">${k}</td><td style="padding:4px 0;">${textToHtml(String(v))}</td></tr>`)
+    .join('');
+  const html = wrapHtml(`
+    <p>A new booking enquiry has been submitted.</p>
+    <table style="border-collapse:collapse;">${rows}</table>
+  `);
+  const text = [
+    'New booking enquiry submitted.',
+    '',
+    ...Object.entries(booking).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`),
+  ].join('\n');
+  return sendMail({ to, subject, html, text });
+}
+
+async function sendApplicationNotification(application) {
+  const to = process.env.BOOKINGS_NOTIFY_EMAIL || 'bookings@ille.co';
+  const name = [application.firstName, application.lastName].filter(Boolean).join(' ') || 'Unknown';
+  const subject = `New model application — ${name}`;
+  const rows = [
+    ['Name', name],
+    ['Email', application.email],
+    ['Phone', application.phone],
+    ['Date of Birth', application.dateOfBirth],
+    ['Height', application.height],
+    ['Instagram', application.instagram],
+  ]
+    .filter(([, v]) => v)
+    .map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;font-weight:bold;vertical-align:top;">${k}</td><td style="padding:4px 0;">${textToHtml(String(v))}</td></tr>`)
+    .join('');
+  const html = wrapHtml(`
+    <p>A new model application has been submitted.</p>
+    <table style="border-collapse:collapse;">${rows}</table>
+    <p style="color:#888;font-size:12px;">Log in to the admin panel to view the submitted photos.</p>
+  `);
+  const text = [
+    'New model application submitted.',
+    '',
+    `Name: ${name}`,
+    application.email ? `Email: ${application.email}` : '',
+    application.phone ? `Phone: ${application.phone}` : '',
+    application.instagram ? `Instagram: ${application.instagram}` : '',
+  ].filter(Boolean).join('\n');
+  return sendMail({ to, subject, html, text });
+}
+
 async function notifySubscribers(subscribers, sendFn) {
   let sent = 0;
   let skipped = 0;
@@ -126,5 +187,7 @@ module.exports = {
   sendWelcome,
   sendNewModelNotice,
   sendBroadcast,
+  sendBookingNotification,
+  sendApplicationNotification,
   notifySubscribers,
 };
