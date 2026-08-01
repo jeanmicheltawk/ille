@@ -698,40 +698,47 @@ app.get('/api/admin/service-submissions', requireAuth, async (req, res) => {
 // NEWSLETTER — public subscribe/unsubscribe + admin management
 // ============================================================
 app.post('/api/newsletter/subscribe', async (req, res) => {
-  const raw = (req.body?.email || '').trim().toLowerCase();
-  if (!EMAIL_RE.test(raw)) {
-    return res.status(400).json({ error: 'Please enter a valid email address' });
-  }
-  const topic = (req.body?.topic || 'models').toString().trim().toLowerCase();
-  if (!SUBSCRIBER_TOPICS.has(topic)) {
-    return res.status(400).json({ error: 'Invalid subscription topic' });
-  }
-  const source = (req.body?.source || 'footer').slice(0, 48);
-  const { rows } = await query('SELECT * FROM email_subscribers WHERE email = $1', [raw]);
-  const existing = rows.find((row) => subscriberTopic(row) === topic);
-
-  if (existing) {
-    if (!existing.active) {
-      await query(
-        'UPDATE email_subscribers SET active = TRUE, "subscribedAt" = NOW() WHERE id = $1',
-        [existing.id],
-      );
-      email.sendWelcome(raw, existing.unsubscribeToken, topic).catch((err) =>
-        console.error('[email] welcome resubscribe failed:', err),
-      );
+  try {
+    const raw = (req.body?.email || '').trim().toLowerCase();
+    if (!EMAIL_RE.test(raw)) {
+      return res.status(400).json({ error: 'Please enter a valid email address' });
     }
-    return res.json({ ok: true });
-  }
+    const topic = (req.body?.topic || 'models').toString().trim().toLowerCase();
+    if (!SUBSCRIBER_TOPICS.has(topic)) {
+      return res.status(400).json({ error: 'Invalid subscription topic' });
+    }
+    const source = (req.body?.source || 'footer').slice(0, 48);
+    // email is UNIQUE — one row per address; topic lives in `source` (e.g. footer:community)
+    const { rows } = await query('SELECT * FROM email_subscribers WHERE email = $1', [raw]);
+    const existing = rows[0];
 
-  const token = email.generateToken();
-  await query(
-    'INSERT INTO email_subscribers (email, "unsubscribeToken", source) VALUES ($1, $2, $3)',
-    [raw, token, subscribeSource(source, topic)],
-  );
-  email.sendWelcome(raw, token, topic).catch((err) =>
-    console.error('[email] welcome failed:', err),
-  );
-  res.json({ ok: true });
+    if (existing) {
+      const sameTopic = subscriberTopic(existing) === topic;
+      if (!existing.active || !sameTopic) {
+        await query(
+          'UPDATE email_subscribers SET active = TRUE, "subscribedAt" = NOW(), source = $2 WHERE id = $1',
+          [existing.id, subscribeSource(source, topic)],
+        );
+        email.sendWelcome(raw, existing.unsubscribeToken, topic).catch((err) =>
+          console.error('[email] welcome resubscribe failed:', err),
+        );
+      }
+      return res.json({ ok: true });
+    }
+
+    const token = email.generateToken();
+    await query(
+      'INSERT INTO email_subscribers (email, "unsubscribeToken", source) VALUES ($1, $2, $3)',
+      [raw, token, subscribeSource(source, topic)],
+    );
+    email.sendWelcome(raw, token, topic).catch((err) =>
+      console.error('[email] welcome failed:', err),
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[newsletter] subscribe failed:', err);
+    res.status(500).json({ error: 'Subscription failed' });
+  }
 });
 
 app.post('/api/newsletter/unsubscribe', async (req, res) => {

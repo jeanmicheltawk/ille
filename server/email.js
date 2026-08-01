@@ -4,7 +4,7 @@
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
 
-const FROM = process.env.NEWSLETTER_FROM || 'newsletter@ille.co';
+const FROM = process.env.NEWSLETTER_FROM || 'bookings@ille.co';
 const SITE_URL = (process.env.SITE_URL || 'http://localhost:4200').replace(/\/$/, '');
 
 let transporter = null;
@@ -22,33 +22,96 @@ function generateToken() {
 }
 
 function getTransporter() {
-  if (!isConfigured()) return null;
+  if (!isConfigured()) {
+    console.log('[email] SMTP not configured (need SMTP_HOST, SMTP_USER, SMTP_PASS)');
+    return null;
+  }
   if (!transporter) {
+    const host = process.env.SMTP_HOST;
+    const port = Number(process.env.SMTP_PORT || 587);
+    const secure = process.env.SMTP_SECURE === 'true';
+    console.log('[email] creating transporter', {
+      host,
+      port,
+      secure,
+      user: process.env.SMTP_USER,
+      passSet: !!process.env.SMTP_PASS,
+      // force IPv4 — Office365 often returns IPv6 that fails with ENETUNREACH on Windows
+      family: 4,
+    });
     transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: process.env.SMTP_SECURE === 'true',
+      host,
+      port,
+      secure,
+      // Prefer IPv4 so smtp.office365.com does not hang on unreachable IPv6
+      family: 4,
       auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      logger: true,
+      debug: true,
+      connectionTimeout: 15000,
+      greetingTimeout: 15000,
+      socketTimeout: 15000,
     });
   }
   return transporter;
 }
 
+function logoUrl() {
+  return `${SITE_URL}/assets/ille-logo-black.png`;
+}
+
 function wrapHtml(bodyHtml, unsubscribeToken) {
   const footer = unsubscribeToken ? unsubscribeFooter(unsubscribeToken) : '';
+  const logo = logoUrl();
+  // Table-based layout for Outlook/Gmail; keep styles inline.
   return `<!DOCTYPE html>
-<html><body style="font-family:Georgia,serif;color:#1a1a1a;line-height:1.6;max-width:560px;margin:0 auto;padding:24px;">
-  ${bodyHtml}
-  ${footer}
-</body></html>`;
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ille</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f5f5f5;color:#1a1a1a;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f5f5f5;margin:0;padding:0;width:100%;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+        <table role="presentation" width="560" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;background-color:#ffffff;">
+          <tr>
+            <td align="center" style="padding:36px 40px 20px 40px;border-bottom:1px solid #eee;">
+              <a href="${SITE_URL}" style="text-decoration:none;">
+                <img src="${logo}" width="120" alt="ille" style="display:block;width:120px;height:auto;border:0;outline:none;">
+              </a>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:32px 40px 16px 40px;font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.7;color:#1a1a1a;text-align:left;">
+              ${bodyHtml}
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 40px 36px 40px;font-family:Georgia,'Times New Roman',serif;font-size:16px;line-height:1.7;color:#1a1a1a;">
+              ${footer}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 function unsubscribeFooter(token) {
   const url = `${SITE_URL}/newsletter/unsubscribe?token=${encodeURIComponent(token)}`;
-  return `<p style="color:#888;font-size:12px;margin-top:32px;border-top:1px solid #eee;padding-top:16px;">
-    You're receiving this because you subscribed at ille.
-    <a href="${url}" style="color:#888;">Unsubscribe</a>
-  </p>`;
+  return `
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:28px;border-top:1px solid #eee;">
+      <tr>
+        <td style="padding-top:20px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#888888;">
+          You're receiving this because you subscribed at ille.
+          <a href="${url}" style="color:#888888;text-decoration:underline;">Unsubscribe</a>
+        </td>
+      </tr>
+    </table>`;
 }
 
 function textToHtml(text) {
@@ -65,24 +128,85 @@ async function sendMail({ to, subject, html, text }) {
     console.log(`[email] SMTP not configured — would send to ${to}: ${subject}`);
     return { ok: false, skipped: true };
   }
-  await t.sendMail({ from: FROM, to, subject, html, text });
-  return { ok: true };
+
+  console.log('[email] sendMail start', { from: FROM, to, subject });
+
+  try {
+    // Do NOT pass a callback here — with a callback, await resolves immediately
+    // and you never see success/error logs in the debugger.
+    const info = await t.sendMail({ from: FROM, to, subject, html, text });
+    console.log('[email] sendMail ok', {
+      messageId: info.messageId,
+      response: info.response,
+      accepted: info.accepted,
+      rejected: info.rejected,
+    });
+    return { ok: true, messageId: info.messageId };
+  } catch (err) {
+    console.error('[email] sendMail failed', {
+      code: err.code,
+      command: err.command,
+      response: err.response,
+      responseCode: err.responseCode,
+      address: err.address,
+      port: err.port,
+      message: err.message,
+    });
+    throw err;
+  }
 }
 
 async function sendWelcome(email, token, topic = 'models') {
   const isCommunity = topic === 'community';
-  const subject = 'Welcome to ille updates';
-  const html = wrapHtml(`
-    <p>Thank you for subscribing to ille updates.</p>
-    <p>${
-      isCommunity
-        ? "You'll be the first to know about our upcoming model camps and workshops."
-        : "You'll be the first to see our new faces."
-    }</p>
-  `, token);
+  const subject = isCommunity
+    ? 'Welcome to the ille community'
+    : 'Thank you for joining ille updates';
+  const headline = isCommunity ? 'Welcome to the community' : 'Thank you for subscribing';
+  const body = isCommunity
+    ? `
+      <p style="margin:0 0 18px 0;font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.35;color:#1a1a1a;">
+        ${headline}
+      </p>
+      <p style="margin:0 0 14px 0;">Thank you for joining the ille community.</p>
+      <p style="margin:0 0 14px 0;">We're glad you're here. You'll be among the first to hear about our model camps, workshops, and the moments that bring our world together.</p>
+      <p style="margin:0 0 14px 0;">We can't wait to share what's next with you.</p>
+      <p style="margin:28px 0 0 0;">Warmly,<br><span style="letter-spacing:0.04em;">ille</span></p>
+    `
+    : `
+      <p style="margin:0 0 18px 0;font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.35;color:#1a1a1a;">
+        ${headline}
+      </p>
+      <p style="margin:0 0 14px 0;">Thank you for subscribing to ille model updates.</p>
+      <p style="margin:0 0 14px 0;">You'll be the first to discover new faces as they join our roster — carefully chosen, quietly announced, and shared with you before anyone else.</p>
+      <p style="margin:0 0 14px 0;">We're happy to have you with us.</p>
+      <p style="margin:28px 0 0 0;">Warmly,<br><span style="letter-spacing:0.04em;">ille</span></p>
+    `;
+  const html = wrapHtml(body, token);
   const text = isCommunity
-    ? 'Thank you for subscribing to ille updates.\n\nYou\'ll be the first to know about our upcoming model camps and workshops.'
-    : 'Thank you for subscribing to ille updates.\n\nYou\'ll be the first to see our new faces.';
+    ? [
+        'Welcome to the community',
+        '',
+        'Thank you for joining the ille community.',
+        '',
+        "We're glad you're here. You'll be among the first to hear about our model camps, workshops, and the moments that bring our world together.",
+        '',
+        "We can't wait to share what's next with you.",
+        '',
+        'Warmly,',
+        'ille',
+      ].join('\n')
+    : [
+        'Thank you for subscribing',
+        '',
+        'Thank you for subscribing to ille model updates.',
+        '',
+        "You'll be the first to discover new faces as they join our roster — carefully chosen, quietly announced, and shared with you before anyone else.",
+        '',
+        "We're happy to have you with us.",
+        '',
+        'Warmly,',
+        'ille',
+      ].join('\n');
   return sendMail({ to: email, subject, html, text });
 }
 
@@ -131,6 +255,7 @@ async function sendBookingNotification(booking) {
     '',
     ...Object.entries(booking).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`),
   ].join('\n');
+  console.log('[email] sendBookingNotification', { to, subject });
   return sendMail({ to, subject, html, text });
 }
 
