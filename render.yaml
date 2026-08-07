@@ -1,5 +1,6 @@
-# Backend API for the GitHub Pages frontend.
-# Deploy: Render dashboard → New → Blueprint → connect jeanmicheltawk/ille
+# Full site (Angular) + API on one Render web service.
+# Deploy: Render dashboard → New → Blueprint → connect your repo
+# Then add custom domain ille.co in the Render dashboard.
 
 databases:
   - name: ille-db
@@ -11,14 +12,19 @@ services:
   - type: web
     name: ille-api
     runtime: node
-    plan: free
-    buildCommand: cd server && npm install
+    plan: starter
+    # Build frontend at repo root, then install server deps.
+    # On start, server/index.js serves dist/ille-angular/browser + /api.
+    # --include=dev so @angular/cli is present (Render sets NODE_ENV=production)
+    buildCommand: npm ci --include=dev && npm run build && cd server && npm ci
     startCommand: cd server && node index.js
     envVars:
       - key: NODE_VERSION
         value: "20"
       - key: NODE_ENV
         value: production
+      - key: SITE_URL
+        value: https://ille.co
       - key: DATABASE_URL
         fromDatabase:
           name: ille-db

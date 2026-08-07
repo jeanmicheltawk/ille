@@ -4,9 +4,9 @@
   "description": "Model agency site (ille.co rebuild) in Angular + Supabase",
   "scripts": {
     "start": "ng serve",
-    "build": "ng build",
-    "build:pages": "ng build --configuration=pages",
-    "watch": "ng build --watch --configuration development"
+    "build": "npx ng build",
+    "build:pages": "npx ng build --configuration=pages",
+    "watch": "npx ng build --watch --configuration development"
   },
   "private": true,
   "dependencies": {

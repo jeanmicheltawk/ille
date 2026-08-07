@@ -13,10 +13,6 @@ import { EmailSubscriber } from '../../core/models.types';
       <div class="sub-admin__head">
         <div>
           <h3>Email subscribers ({{ subscribers.length }})</h3>
-          <p class="muted" *ngIf="!emailConfigured">
-            SMTP is not configured — subscribers are saved but emails won't be sent until you set
-            <code>SMTP_*</code> env vars on the server.
-          </p>
           <p class="muted" *ngIf="emailConfigured">
             New published models trigger an automatic email for Models' Update subscribers.
             Use the filter and form below to send custom messages to each list.
