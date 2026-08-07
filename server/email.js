@@ -3,13 +3,28 @@
 
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 
 const FROM = process.env.NEWSLETTER_FROM || 'bookings@ille.co';
-const SITE_URL = (process.env.SITE_URL || 'http://localhost:4200').replace(/\/$/, '');
+const NOTIFY_TO = process.env.BOOKINGS_NOTIFY_EMAIL || 'bookings@ille.co';
+const INFO_FROM = process.env.INFO_FROM || 'info@ille.co';
+const INFO_NOTIFY_TO = process.env.INFO_NOTIFY_EMAIL || 'info@ille.co';
+const SITE_URL = (process.env.SITE_URL || 'https://ille.co').replace(/\/$/, '');
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const LOGO_CID = 'ille-logo@ille';
+const LOGO_PATH = path.join(__dirname, 'assets', 'ille-logo-black.png');
 
-let transporter = null;
+const transporters = { bookings: null, info: null };
 
-function isConfigured() {
+function isConfigured(account = 'bookings') {
+  if (account === 'info') {
+    return !!(
+      (process.env.INFO_SMTP_HOST || process.env.SMTP_HOST) &&
+      (process.env.INFO_SMTP_USER || process.env.SMTP_USER) &&
+      (process.env.INFO_SMTP_PASS || process.env.SMTP_PASS)
+    );
+  }
   return !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
 }
 
@@ -21,31 +36,51 @@ function generateToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
-function getTransporter() {
-  if (!isConfigured()) {
-    console.log('[email] SMTP not configured (need SMTP_HOST, SMTP_USER, SMTP_PASS)');
+function smtpConfig(account = 'bookings') {
+  if (account === 'info') {
+    return {
+      host: process.env.INFO_SMTP_HOST || process.env.SMTP_HOST,
+      port: Number(process.env.INFO_SMTP_PORT || process.env.SMTP_PORT || 587),
+      secure: (process.env.INFO_SMTP_SECURE || process.env.SMTP_SECURE) === 'true',
+      user: process.env.INFO_SMTP_USER || process.env.SMTP_USER,
+      pass: process.env.INFO_SMTP_PASS || process.env.SMTP_PASS,
+      from: INFO_FROM,
+    };
+  }
+  return {
+    host: process.env.SMTP_HOST,
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: process.env.SMTP_SECURE === 'true',
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+    from: FROM,
+  };
+}
+
+function getTransporter(account = 'bookings') {
+  if (!isConfigured(account)) {
+    console.log(`[email] SMTP not configured for ${account}`);
     return null;
   }
-  if (!transporter) {
-    const host = process.env.SMTP_HOST;
-    const port = Number(process.env.SMTP_PORT || 587);
-    const secure = process.env.SMTP_SECURE === 'true';
+  if (!transporters[account]) {
+    const cfg = smtpConfig(account);
     console.log('[email] creating transporter', {
-      host,
-      port,
-      secure,
-      user: process.env.SMTP_USER,
-      passSet: !!process.env.SMTP_PASS,
+      account,
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.secure,
+      user: cfg.user,
+      passSet: !!cfg.pass,
       // force IPv4 — Office365 often returns IPv6 that fails with ENETUNREACH on Windows
       family: 4,
     });
-    transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
+    transporters[account] = nodemailer.createTransport({
+      host: cfg.host,
+      port: cfg.port,
+      secure: cfg.secure,
       // Prefer IPv4 so smtp.office365.com does not hang on unreachable IPv6
       family: 4,
-      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+      auth: { user: cfg.user, pass: cfg.pass },
       logger: true,
       debug: true,
       connectionTimeout: 15000,
@@ -53,16 +88,27 @@ function getTransporter() {
       socketTimeout: 15000,
     });
   }
-  return transporter;
+  return transporters[account];
 }
 
-function logoUrl() {
-  return `${SITE_URL}/assets/ille-logo-black.png`;
+function logoAttachment() {
+  if (!fs.existsSync(LOGO_PATH)) {
+    console.warn('[email] logo file missing:', LOGO_PATH);
+    return null;
+  }
+  return {
+    filename: 'ille-logo-black.png',
+    path: LOGO_PATH,
+    cid: LOGO_CID,
+    contentType: 'image/png',
+    contentDisposition: 'inline',
+  };
 }
 
 function wrapHtml(bodyHtml, unsubscribeToken) {
   const footer = unsubscribeToken ? unsubscribeFooter(unsubscribeToken) : '';
-  const logo = logoUrl();
+  // Inline CID attachment — do not rely on SITE_URL/assets (404 on production WordPress).
+  const logoSrc = `cid:${LOGO_CID}`;
   // Table-based layout for Outlook/Gmail; keep styles inline.
   return `<!DOCTYPE html>
 <html lang="en">
@@ -79,7 +125,7 @@ function wrapHtml(bodyHtml, unsubscribeToken) {
           <tr>
             <td align="center" style="padding:36px 40px 20px 40px;border-bottom:1px solid #eee;">
               <a href="${SITE_URL}" style="text-decoration:none;">
-                <img src="${logo}" width="120" alt="ille" style="display:block;width:120px;height:auto;border:0;outline:none;">
+                <img src="${logoSrc}" width="120" alt="ille" style="display:block;width:120px;height:auto;border:0;outline:none;">
               </a>
             </td>
           </tr>
@@ -122,37 +168,162 @@ function textToHtml(text) {
     .replace(/\n/g, '<br>');
 }
 
-async function sendMail({ to, subject, html, text }) {
-  const t = getTransporter();
+function isSmtpAuthError(err) {
+  const msg = String(err?.message || err?.response || '');
+  return (
+    err?.code === 'EAUTH' ||
+    err?.responseCode === 535 ||
+    /SmtpClientAuthentication is disabled/i.test(msg) ||
+    /Authentication unsuccessful/i.test(msg)
+  );
+}
+
+async function sendMailOnce(account, { to, subject, html, text, fromOverride = null }) {
+  const t = getTransporter(account);
+  const cfg = smtpConfig(account);
+  const from = fromOverride || cfg.from;
   if (!t) {
-    console.log(`[email] SMTP not configured — would send to ${to}: ${subject}`);
+    console.log(`[email] SMTP not configured for ${account} — would send to ${to}: ${subject}`);
     return { ok: false, skipped: true };
   }
 
-  console.log('[email] sendMail start', { from: FROM, to, subject });
+  const attachments = [];
+  const logo = logoAttachment();
+  if (logo) attachments.push(logo);
 
+  console.log('[email] sendMail start', {
+    account,
+    authUser: cfg.user,
+    from,
+    to,
+    subject,
+    logoAttached: !!logo,
+  });
+  const info = await t.sendMail({
+    from,
+    sender: from,
+    replyTo: from,
+    to,
+    subject,
+    html,
+    text,
+    attachments,
+  });
+  console.log('[email] sendMail ok', {
+    account,
+    authUser: cfg.user,
+    from,
+    messageId: info.messageId,
+    response: info.response,
+    accepted: info.accepted,
+    rejected: info.rejected,
+    envelope: info.envelope,
+  });
+  return { ok: true, messageId: info.messageId, account, from, authUser: cfg.user };
+}
+
+/**
+ * Subscriber / info emails must show From: info@ille.co.
+ * 1) Auth as info@ille.co
+ * 2) If that fails, auth as bookings but still From: info@ille.co (Send As)
+ * Never fall back to From: bookings@ille.co for account=info.
+ */
+async function sendMail({ to, subject, html, text, account = 'bookings' }) {
+  const payload = { to, subject, html, text };
+
+  if (account !== 'info') {
+    return sendMailOnce(account, payload);
+  }
+
+  console.log('[email] INFO SEND requested', {
+    to,
+    subject,
+    infoConfigured: isConfigured('info'),
+    bookingsConfigured: isConfigured('bookings'),
+    INFO_FROM,
+    INFO_SMTP_USER: process.env.INFO_SMTP_USER || null,
+    INFO_SMTP_PASS_SET: !!process.env.INFO_SMTP_PASS,
+  });
+
+  // Attempt 1: login as info@ille.co
   try {
-    // Do NOT pass a callback here — with a callback, await resolves immediately
-    // and you never see success/error logs in the debugger.
-    const info = await t.sendMail({ from: FROM, to, subject, html, text });
-    console.log('[email] sendMail ok', {
-      messageId: info.messageId,
-      response: info.response,
-      accepted: info.accepted,
-      rejected: info.rejected,
+    transporters.info = null; // force fresh transporter (SMTP AUTH may have just been enabled)
+    const result = await sendMailOnce('info', payload);
+    console.log('[email] INFO SEND success via info SMTP login', {
+      to,
+      from: result.from,
+      authUser: result.authUser,
     });
-    return { ok: true, messageId: info.messageId };
+    return result;
   } catch (err) {
-    console.error('[email] sendMail failed', {
+    console.error('[email] INFO SEND attempt1 (info login) FAILED', {
+      to,
       code: err.code,
       command: err.command,
-      response: err.response,
       responseCode: err.responseCode,
-      address: err.address,
-      port: err.port,
+      response: err.response,
+      message: err.message,
+    });
+  }
+
+  // Attempt 2: login as bookings, but keep From = info@ille.co
+  if (!isConfigured('bookings')) {
+    throw new Error('info@ille.co SMTP failed and bookings SMTP is not configured');
+  }
+
+  console.warn(
+    '[email] INFO SEND attempt2 — auth as bookings@ille.co but From/Reply-To stay info@ille.co',
+  );
+  try {
+    const result = await sendMailOnce('bookings', {
+      ...payload,
+      fromOverride: INFO_FROM,
+    });
+    console.log('[email] INFO SEND success via bookings auth + From info@ille.co', {
+      to,
+      from: result.from,
+      authUser: result.authUser,
+    });
+    return result;
+  } catch (err) {
+    console.error('[email] INFO SEND attempt2 FAILED (need Send As permission for info@ille.co)', {
+      to,
+      code: err.code,
+      command: err.command,
+      responseCode: err.responseCode,
+      response: err.response,
       message: err.message,
     });
     throw err;
+  }
+}
+
+async function verifyInfoSmtp() {
+  console.log('[email] verifyInfoSmtp start', {
+    configured: isConfigured('info'),
+    user: process.env.INFO_SMTP_USER || null,
+    passSet: !!process.env.INFO_SMTP_PASS,
+    from: INFO_FROM,
+    host: process.env.INFO_SMTP_HOST || process.env.SMTP_HOST || null,
+  });
+  if (!isConfigured('info')) {
+    console.warn('[email] verifyInfoSmtp SKIP — INFO_SMTP_* not set');
+    return { ok: false, reason: 'not_configured' };
+  }
+  try {
+    transporters.info = null;
+    const t = getTransporter('info');
+    await t.verify();
+    console.log('[email] verifyInfoSmtp OK — info@ille.co can authenticate via SMTP');
+    return { ok: true };
+  } catch (err) {
+    console.error('[email] verifyInfoSmtp FAILED', {
+      code: err.code,
+      responseCode: err.responseCode,
+      response: err.response,
+      message: err.message,
+    });
+    return { ok: false, reason: err.message, code: err.code };
   }
 }
 
@@ -207,31 +378,116 @@ async function sendWelcome(email, token, topic = 'models') {
         'Warmly,',
         'ille',
       ].join('\n');
-  return sendMail({ to: email, subject, html, text });
+  // Welcome / subscribe confirmations from info@ille.co
+  return sendMail({ to: email, subject, html, text, account: 'info' });
 }
 
 async function sendNewModelNotice(email, token, model) {
-  const profileUrl = `${SITE_URL}/model/${model.id}`;
+  const profileUrl = `${SITE_URL}/model/${encodeURIComponent(model.id)}`;
   const subject = `New model — ${model.name}`;
+  console.log('[email] sendNewModelNotice start', {
+    to: email,
+    modelId: model?.id,
+    modelName: model?.name,
+    profileUrl,
+    account: 'info',
+    infoConfigured: isConfigured('info'),
+    from: INFO_FROM,
+  });
   const html = wrapHtml(`
-    <p>We've just added a new model to our roster:</p>
-    <p><strong>${model.name}</strong></p>
-    <p><a href="${profileUrl}" style="color:#1a1a1a;">View profile →</a></p>
+    <p style="margin:0 0 18px 0;font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.35;color:#1a1a1a;">
+      A new face joins ille
+    </p>
+    <p style="margin:0 0 14px 0;">We've just added a new model to our roster:</p>
+    <p style="margin:0 0 14px 0;"><strong>${textToHtml(String(model.name || ''))}</strong></p>
+    <p style="margin:0 0 14px 0;"><a href="${profileUrl}" style="color:#1a1a1a;">View profile →</a></p>
+    <p style="margin:28px 0 0 0;">Warmly,<br><span style="letter-spacing:0.04em;">ille</span></p>
   `, token);
-  const text = `New model at ille: ${model.name}\n\nView profile: ${profileUrl}`;
-  return sendMail({ to: email, subject, html, text });
+  const text = [
+    'A new face joins ille',
+    '',
+    `We've just added a new model to our roster: ${model.name}`,
+    '',
+    `View profile: ${profileUrl}`,
+    '',
+    'Warmly,',
+    'ille',
+  ].join('\n');
+  // New-model notices go out from info@ille.co
+  try {
+    const result = await sendMail({ to: email, subject, html, text, account: 'info' });
+    console.log('[email] sendNewModelNotice result', { to: email, result });
+    return result;
+  } catch (err) {
+    console.error('[email] sendNewModelNotice error', {
+      to: email,
+      message: err?.message,
+      code: err?.code,
+      response: err?.response,
+      responseCode: err?.responseCode,
+    });
+    throw err;
+  }
 }
 
 async function sendBroadcast(email, token, subject, message) {
   const html = wrapHtml(`<div>${textToHtml(message)}</div>`, token);
   const text = message;
-  return sendMail({ to: email, subject, html, text });
+  return sendMail({ to: email, subject, html, text, account: 'info' });
+}
+
+function extractEmail(data) {
+  if (!data || typeof data !== 'object') return null;
+  const direct = data.email;
+  if (typeof direct === 'string' && EMAIL_RE.test(direct.trim())) return direct.trim();
+  for (const [key, value] of Object.entries(data)) {
+    if (/email/i.test(key) && typeof value === 'string' && EMAIL_RE.test(value.trim())) {
+      return value.trim();
+    }
+  }
+  for (const value of Object.values(data)) {
+    if (typeof value === 'string' && EMAIL_RE.test(value.trim())) return value.trim();
+  }
+  return null;
+}
+
+function fieldRowsHtml(pairs) {
+  return pairs
+    .filter(([, v]) => v != null && String(v).trim() !== '')
+    .map(([k, v]) =>
+      `<tr><td style="padding:4px 12px 4px 0;font-weight:bold;vertical-align:top;">${textToHtml(String(k))}</td>` +
+      `<td style="padding:4px 0;">${textToHtml(String(v))}</td></tr>`,
+    )
+    .join('');
+}
+
+function formatSubmissionPairs(data, formFields) {
+  const fields = Array.isArray(formFields) ? formFields : [];
+  const used = new Set();
+  const pairs = [];
+
+  for (const field of fields) {
+    if (!field || field.type === 'info' || !field.id) continue;
+    const value = data?.[field.id];
+    if (value == null || String(value).trim() === '') continue;
+    pairs.push([field.label || field.id, value]);
+    used.add(field.id);
+  }
+
+  if (data && typeof data === 'object') {
+    for (const [key, value] of Object.entries(data)) {
+      if (used.has(key) || key.endsWith('_code')) continue;
+      if (value == null || String(value).trim() === '') continue;
+      pairs.push([key, value]);
+    }
+  }
+  return pairs;
 }
 
 async function sendBookingNotification(booking) {
-  const to = process.env.BOOKINGS_NOTIFY_EMAIL || 'bookings@ille.co';
+  const to = NOTIFY_TO;
   const subject = `New booking enquiry — ${booking.clientName || 'Unknown'}`;
-  const rows = [
+  const rows = fieldRowsHtml([
     ['Client', booking.clientName],
     ['Company', booking.company],
     ['Email', booking.email],
@@ -242,10 +498,7 @@ async function sendBookingNotification(booking) {
     ['Budget', booking.budget],
     ['Model ID', booking.modelId],
     ['Message', booking.message],
-  ]
-    .filter(([, v]) => v)
-    .map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;font-weight:bold;vertical-align:top;">${k}</td><td style="padding:4px 0;">${textToHtml(String(v))}</td></tr>`)
-    .join('');
+  ]);
   const html = wrapHtml(`
     <p>A new booking enquiry has been submitted.</p>
     <table style="border-collapse:collapse;">${rows}</table>
@@ -260,20 +513,17 @@ async function sendBookingNotification(booking) {
 }
 
 async function sendApplicationNotification(application) {
-  const to = process.env.BOOKINGS_NOTIFY_EMAIL || 'bookings@ille.co';
+  const to = NOTIFY_TO;
   const name = [application.firstName, application.lastName].filter(Boolean).join(' ') || 'Unknown';
   const subject = `New model application — ${name}`;
-  const rows = [
+  const rows = fieldRowsHtml([
     ['Name', name],
     ['Email', application.email],
     ['Phone', application.phone],
     ['Date of Birth', application.dateOfBirth],
     ['Height', application.height],
     ['Instagram', application.instagram],
-  ]
-    .filter(([, v]) => v)
-    .map(([k, v]) => `<tr><td style="padding:4px 12px 4px 0;font-weight:bold;vertical-align:top;">${k}</td><td style="padding:4px 0;">${textToHtml(String(v))}</td></tr>`)
-    .join('');
+  ]);
   const html = wrapHtml(`
     <p>A new model application has been submitted.</p>
     <table style="border-collapse:collapse;">${rows}</table>
@@ -290,29 +540,116 @@ async function sendApplicationNotification(application) {
   return sendMail({ to, subject, html, text });
 }
 
+async function sendServiceSubmissionNotification(service, data) {
+  const to = INFO_NOTIFY_TO;
+  const title = service.formTitle || service.title || 'Service enquiry';
+  const subject = `New service enquiry — ${title}`;
+  const pairs = formatSubmissionPairs(data, service.formFields);
+  const rows = fieldRowsHtml(pairs);
+  const html = wrapHtml(`
+    <p>A new service form has been submitted.</p>
+    <p><strong>${textToHtml(String(title))}</strong></p>
+    <table style="border-collapse:collapse;">${rows}</table>
+  `);
+  const text = [
+    'New service form submitted.',
+    `Service: ${title}`,
+    '',
+    ...pairs.map(([k, v]) => `${k}: ${v}`),
+  ].join('\n');
+  console.log('[email] sendServiceSubmissionNotification', { to, subject });
+  return sendMail({ to, subject, html, text, account: 'info' });
+}
+
+async function sendFormConfirmation(toEmail, { kind, title, name } = {}) {
+  if (!toEmail || !EMAIL_RE.test(toEmail)) {
+    console.log('[email] skip confirmation — no valid recipient email');
+    return { ok: false, skipped: true };
+  }
+  const useInfo = kind === 'service';
+  const replyAddress = useInfo ? INFO_FROM : FROM;
+  const label = title || (
+    kind === 'application' ? 'model application'
+      : kind === 'booking' ? 'booking enquiry'
+        : 'request'
+  );
+  const greeting = name ? `Hi ${name},` : 'Hello,';
+  const subject = `We received your ${label} — ille`;
+  const html = wrapHtml(`
+    <p style="margin:0 0 18px 0;font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.35;color:#1a1a1a;">
+      Thank you
+    </p>
+    <p style="margin:0 0 14px 0;">${textToHtml(greeting)}</p>
+    <p style="margin:0 0 14px 0;">We've received your ${textToHtml(String(label))} and our team will be in touch shortly.</p>
+    <p style="margin:0 0 14px 0;">If you have any questions in the meantime, reply to this email or write to us at ${textToHtml(replyAddress)}.</p>
+    <p style="margin:28px 0 0 0;">Warmly,<br><span style="letter-spacing:0.04em;">ille</span></p>
+  `);
+  const text = [
+    'Thank you',
+    '',
+    greeting,
+    '',
+    `We've received your ${label} and our team will be in touch shortly.`,
+    '',
+    `If you have any questions in the meantime, reply to this email or write to us at ${replyAddress}.`,
+    '',
+    'Warmly,',
+    'ille',
+  ].join('\n');
+  return sendMail({
+    to: toEmail,
+    subject,
+    html,
+    text,
+    account: useInfo ? 'info' : 'bookings',
+  });
+}
+
 async function notifySubscribers(subscribers, sendFn) {
   let sent = 0;
   let skipped = 0;
+  let failed = 0;
+  console.log('[email] notifySubscribers start', {
+    total: subscribers.length,
+    emails: subscribers.map((sub) => sub.email),
+  });
   for (const sub of subscribers) {
     try {
       const result = await sendFn(sub);
-      if (result.skipped) skipped++;
-      else sent++;
+      if (result?.skipped) {
+        skipped++;
+        console.log('[email] notifySubscribers skipped', { email: sub.email, result });
+      } else {
+        sent++;
+        console.log('[email] notifySubscribers sent', { email: sub.email, result });
+      }
     } catch (err) {
-      console.error(`[email] Failed to send to ${sub.email}:`, err.message);
+      failed++;
+      console.error('[email] notifySubscribers failed', {
+        email: sub.email,
+        message: err?.message,
+        code: err?.code,
+        response: err?.response,
+      });
     }
   }
-  return { sent, skipped, total: subscribers.length };
+  const summary = { sent, skipped, failed, total: subscribers.length };
+  console.log('[email] notifySubscribers done', summary);
+  return summary;
 }
 
 module.exports = {
   isConfigured,
   siteUrl,
   generateToken,
+  extractEmail,
+  verifyInfoSmtp,
   sendWelcome,
   sendNewModelNotice,
   sendBroadcast,
   sendBookingNotification,
   sendApplicationNotification,
+  sendServiceSubmissionNotification,
+  sendFormConfirmation,
   notifySubscribers,
 };

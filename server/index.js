@@ -79,20 +79,79 @@ function subscribeSource(baseSource, topic) {
 
 async function activeSubscribers(topic = null) {
   const { rows } = await query('SELECT * FROM email_subscribers WHERE active = TRUE');
+  console.log('[email] activeSubscribers query', {
+    topic: topic || 'all',
+    activeTotal: rows.length,
+    samples: rows.slice(0, 5).map((sub) => ({
+      email: sub.email,
+      source: sub.source,
+      topic: subscriberTopic(sub),
+      active: sub.active,
+    })),
+  });
   if (topic && SUBSCRIBER_TOPICS.has(topic)) {
-    return rows.filter((sub) => subscriberTopic(sub) === topic);
+    const filtered = rows.filter((sub) => subscriberTopic(sub) === topic);
+    console.log('[email] activeSubscribers filtered', {
+      topic,
+      matched: filtered.length,
+      emails: filtered.map((sub) => sub.email),
+    });
+    return filtered;
   }
   return rows;
 }
 
 function notifyNewModel(model) {
-  if (!model.published) return;
-  activeSubscribers('models').then((subs) => {
-    if (!subs.length) return;
-    email.notifySubscribers(subs, (sub) =>
-      email.sendNewModelNotice(sub.email, sub.unsubscribeToken, model),
-    ).catch((err) => console.error('[email] new model notify failed:', err));
+  const published = !!model?.published;
+  console.log('[email] notifyNewModel called', {
+    id: model?.id,
+    name: model?.name,
+    published,
+    rawPublished: model?.published,
+    infoSmtpConfigured: email.isConfigured('info'),
+    bookingsSmtpConfigured: email.isConfigured('bookings'),
+    siteUrl: email.siteUrl(),
   });
+
+  if (!published) {
+    console.log('[email] notifyNewModel SKIP — model is not published');
+    return;
+  }
+
+  // Notify every active subscriber (models + community).
+  // Previously only topic=models, which skipped footer "community" signups.
+  activeSubscribers(null)
+    .then((subs) => {
+      console.log('[email] notifyNewModel subscribers ready', {
+        count: subs.length,
+        emails: subs.map((sub) => sub.email),
+        topics: subs.map((sub) => subscriberTopic(sub)),
+      });
+      if (!subs.length) {
+        console.log('[email] notifyNewModel SKIP — no active subscribers');
+        return null;
+      }
+      return email.notifySubscribers(subs, (sub) => {
+        console.log('[email] notifyNewModel sending to', {
+          email: sub.email,
+          topic: subscriberTopic(sub),
+        });
+        return email.sendNewModelNotice(sub.email, sub.unsubscribeToken, model);
+      });
+    })
+    .then((result) => {
+      if (result) {
+        console.log('[email] notifyNewModel DONE', result);
+      }
+    })
+    .catch((err) => {
+      console.error('[email] notifyNewModel FAILED', {
+        message: err?.message,
+        code: err?.code,
+        response: err?.response,
+        stack: err?.stack,
+      });
+    });
 }
 
 function digitalsNameSlug(name) {
@@ -301,6 +360,12 @@ app.post('/api/admin/models', requireAuth, async (req, res) => {
   try {
     const m = req.body;
     const s = serializeModel(m);
+    console.log('[models] POST /api/admin/models create', {
+      id: s.id,
+      name: s.name,
+      published: s.published,
+      bodyPublished: m?.published,
+    });
     await query(`
       INSERT INTO models (id, name, branch, category, height, bust, waist, hips, "shoeSize",
         hair, eyes, city, "outOfTown", instagram, "coverImage", gallery, digitals,
@@ -313,9 +378,11 @@ app.post('/api/admin/models', requireAuth, async (req, res) => {
     ]);
     await saveModelExtras({ ...m, id: s.id });
     res.json({ ok: true });
-    notifyNewModel(m);
+    console.log('[models] create saved — triggering notifyNewModel');
+    notifyNewModel({ ...m, id: s.id, name: s.name, published: s.published });
   } catch (err) {
     console.error('POST /api/admin/models failed:', err);
+    console.error('[email] notifyNewModel NOT called because create failed');
     res.status(500).json({ error: err.message || 'Failed to save model' });
   }
 });
@@ -342,7 +409,7 @@ app.put('/api/admin/models/:id', requireAuth, async (req, res) => {
     ]);
     await saveModelExtras(m);
     res.json({ ok: true });
-    if (m.published && !prev?.published) notifyNewModel(m);
+    // New-model subscriber emails are sent only on create (POST), not on update.
     reclaimMedia(oldMediaIds);
   } catch (err) {
     console.error('PUT /api/admin/models failed:', err);
@@ -568,6 +635,15 @@ app.post('/api/applications', applicationUpload, async (req, res) => {
   email.sendApplicationNotification(data).catch((err) =>
     console.error('[email] application notification failed:', err),
   );
+  const applicantEmail = email.extractEmail(data);
+  if (applicantEmail) {
+    const name = [data.firstName, data.lastName].filter(Boolean).join(' ');
+    email.sendFormConfirmation(applicantEmail, {
+      kind: 'application',
+      title: 'model application',
+      name,
+    }).catch((err) => console.error('[email] application confirmation failed:', err));
+  }
 });
 
 app.get('/api/admin/applications', requireAuth, async (req, res) => {
@@ -606,6 +682,14 @@ app.post('/api/bookings', async (req, res) => {
   email.sendBookingNotification(data).catch((err) =>
     console.error('[email] booking notification failed:', err),
   );
+  const clientEmail = email.extractEmail(data);
+  if (clientEmail) {
+    email.sendFormConfirmation(clientEmail, {
+      kind: 'booking',
+      title: 'booking enquiry',
+      name: data.clientName || '',
+    }).catch((err) => console.error('[email] booking confirmation failed:', err));
+  }
 });
 
 app.get('/api/admin/bookings', requireAuth, async (req, res) => {
@@ -639,11 +723,30 @@ app.post('/api/service-submissions', async (req, res) => {
   const { rows } = await query('SELECT * FROM service_items WHERE id = $1', [serviceId]);
   const service = rows[0];
   if (!service || !service.formEnabled) return res.status(400).json({ error: 'Invalid service' });
+  const payload = data && typeof data === 'object' ? data : {};
+  const serviceObj = serviceFromRow(service);
   await query(`
     INSERT INTO service_submissions ("serviceId", "serviceTitle", data)
     VALUES ($1, $2, $3)
-  `, [serviceId, service.formTitle || service.title, jsonb(data, {})]);
+  `, [serviceId, service.formTitle || service.title, jsonb(payload, {})]);
   res.json({ ok: true });
+
+  email.sendServiceSubmissionNotification(serviceObj, payload).catch((err) =>
+    console.error('[email] service submission notification failed:', err),
+  );
+  const userEmail = email.extractEmail(payload);
+  if (userEmail) {
+    const name =
+      payload.name ||
+      payload.fullName ||
+      [payload.firstName, payload.lastName].filter(Boolean).join(' ') ||
+      '';
+    email.sendFormConfirmation(userEmail, {
+      kind: 'service',
+      title: service.formTitle || service.title || 'request',
+      name,
+    }).catch((err) => console.error('[email] service confirmation failed:', err));
+  }
 });
 
 app.get('/api/admin/services', requireAuth, async (req, res) => {
@@ -794,8 +897,14 @@ app.post('/api/admin/newsletter/send', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/admin/email-status', requireAuth, (req, res) => {
-  res.json({ configured: email.isConfigured(), siteUrl: email.siteUrl() });
+app.get('/api/admin/email-status', requireAuth, async (req, res) => {
+  const info = await email.verifyInfoSmtp();
+  res.json({
+    configured: email.isConfigured('bookings'),
+    infoConfigured: email.isConfigured('info'),
+    infoSmtp: info,
+    siteUrl: email.siteUrl(),
+  });
 });
 
 app.post('/api/admin/upload', requireAuth, upload.single('image'), async (req, res) => {
@@ -884,6 +993,10 @@ async function main() {
   await initDb();
   app.listen(PORT, () => {
     console.log(`ille API running on http://localhost:${PORT}`);
+    // Diagnose info@ille.co SMTP on boot (does not block startup).
+    email.verifyInfoSmtp().catch((err) =>
+      console.error('[email] verifyInfoSmtp crashed:', err?.message || err),
+    );
   });
 }
 
