@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, NavigationEnd } from '@angular/router';
 import { filter } from 'rxjs/operators';
 
@@ -7,9 +7,12 @@ import { filter } from 'rxjs/operators';
   standalone: true,
   imports: [RouterLink, RouterLinkActive],
   template: `
-    <header class="hdr"  [class.hdr--overlay]="isOverlay">
+    <header class="hdr" [class.hdr--overlay]="isOverlay" [class.is-open]="open" [class.is-scrolled]="scrolled">
+      <!-- Blur lives here so it does not become a containing block for the fixed mobile nav -->
+      <div class="hdr__glass" aria-hidden="true"></div>
+
       <div class="container hdr__row">
-        <a routerLink="/" class="hdr__logo" aria-label="ille home">
+        <a routerLink="/" class="hdr__logo" aria-label="ille home" (click)="close()">
           <img src="assets/ille-logo.png" alt="ille" class="hdr__logo-img" />
         </a>
 
@@ -26,8 +29,9 @@ import { filter } from 'rxjs/operators';
 
         <button
           class="hdr__burger hdr__burger--three"
-          (click)="open = !open"
+          (click)="toggle()"
           [class.is-open]="open"
+          [attr.aria-expanded]="open"
           aria-label="Menu"
         >
           <span></span><span></span><span></span>
@@ -37,27 +41,42 @@ import { filter } from 'rxjs/operators';
   `,
   styles: [`
     .hdr {
-      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.5s ease;
+    }
+    .hdr.is-scrolled { border-bottom-color: var(--line); }
+    .hdr.hdr--overlay.is-scrolled { border-bottom-color: transparent; }
+    .hdr.is-open { border-bottom-color: transparent; }
+
+    .hdr__glass {
+      position: absolute; inset: 0;
       background: rgba(0, 0, 0, 0.72);
       backdrop-filter: blur(20px);
       -webkit-backdrop-filter: blur(20px);
-      border-bottom: 1px solid transparent;
-      transition: background 0.5s ease, border-color 0.5s ease;
+      transition: background 0.5s ease, opacity 0.5s ease;
+      pointer-events: none;
+      z-index: 0;
     }
-    .hdr.is-scrolled { border-bottom-color: var(--line); }
-    .hdr.hdr--overlay {
+    .hdr.hdr--overlay .hdr__glass {
       background: transparent;
       backdrop-filter: none;
       -webkit-backdrop-filter: none;
-      border-bottom-color: transparent;
     }
-    .hdr.hdr--overlay.is-scrolled {
+    .hdr.hdr--overlay.is-scrolled .hdr__glass {
       background: rgba(0, 0, 0, 0.55);
       backdrop-filter: blur(16px);
       -webkit-backdrop-filter: blur(16px);
     }
+    .hdr.is-open .hdr__glass {
+      background: #000;
+      backdrop-filter: none;
+      -webkit-backdrop-filter: none;
+    }
 
     .hdr__row {
+      position: relative;
+      z-index: 2;
       display: flex; align-items: center; justify-content: space-between;
       height: 80px;
     }
@@ -71,9 +90,6 @@ import { filter } from 'rxjs/operators';
       height: 110px;
       width: auto;
       display: block;
-    }
-    .hdr--overlay .hdr__logo-img {
-      height: 110px;
     }
 
     .hdr__nav { display: flex; gap: 40px; }
@@ -99,20 +115,24 @@ import { filter } from 'rxjs/operators';
     @media (min-width: 861px) {
       .hdr--overlay .hdr__nav {
         position: fixed; top: 80px; left: 0; right: 0; bottom: 0;
+        z-index: 1;
         flex-direction: column; align-items: center; justify-content: center;
-        gap: 8px;
-        background: rgba(0, 0, 0, 0.92);
-        backdrop-filter: blur(24px);
+        gap: 0;
+        background: #000;
         opacity: 0; pointer-events: none;
         transition: opacity 0.5s ease;
       }
       .hdr--overlay .hdr__nav.is-open { opacity: 1; pointer-events: auto; }
       .hdr--overlay .hdr__nav a {
-        padding: 14px 0;
+        display: block;
+        width: min(420px, 80vw);
+        text-align: center;
+        padding: 18px 0;
         font-size: 12px;
         letter-spacing: 0.32em;
-        border-bottom: none;
+        border-bottom: 1px solid var(--line);
       }
+      .hdr--overlay .hdr__nav a:last-child { border-bottom: none; }
     }
 
     .hdr__burger {
@@ -120,6 +140,7 @@ import { filter } from 'rxjs/operators';
       background: none; border: 0; cursor: pointer;
       padding: 10px; width: 40px; height: 40px;
       position: relative;
+      z-index: 3;
     }
     .hdr--overlay .hdr__burger { display: block; }
     .hdr__burger span {
@@ -140,36 +161,63 @@ import { filter } from 'rxjs/operators';
     @media (max-width: 860px) {
       .hdr__burger { display: block; }
       .hdr__nav {
-        position: fixed; top: 80px; left: 0; right: 0; bottom: 0;
-        flex-direction: column; gap: 0;
-        background: rgba(0, 0, 0, 0.96);
-        backdrop-filter: blur(24px);
-        padding: 20px 0;
-        opacity: 0; pointer-events: none;
-        transition: opacity 0.4s ease;
+        position: fixed;
+        top: 80px; left: 0; right: 0; bottom: 0;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        justify-content: flex-start;
+        gap: 0;
+        margin: 0;
+        padding: 8px 0 40px;
+        background: #000;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: opacity 0.35s ease, visibility 0.35s ease;
       }
-      .hdr__nav.is-open { opacity: 1; pointer-events: auto; }
+      .hdr__nav.is-open {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+      }
       .hdr__nav a {
-        padding: 22px 32px;
+        display: block;
+        flex: 0 0 auto;
+        padding: 20px 32px;
         font-size: 11px;
+        font-weight: 300;
         letter-spacing: 0.3em;
+        line-height: 1.4;
         border-bottom: 1px solid var(--line);
         color: var(--ink-soft);
+        background: #000;
       }
+      .hdr__nav a:last-child { border-bottom: none; }
       .hdr__nav a:hover,
       .hdr__nav a.active { color: var(--ink); }
+      .hdr--overlay .hdr__nav a { color: rgba(255,255,255,0.7); }
+      .hdr--overlay .hdr__nav a:hover,
+      .hdr--overlay .hdr__nav a.active { color: #fff; }
     }
   `],
 })
-export class HeaderComponent {
+export class HeaderComponent implements OnDestroy {
   open = false;
   scrolled = false;
   isOverlay = false;
 
+  private onScroll = () => {
+    this.scrolled = window.scrollY > 20;
+  };
+
   constructor(private router: Router) {
     const update = (url: string) => {
       this.isOverlay = url === '/' || url === '' || /^\/services\/[^/]+\/book/.test(url);
-      this.open = false;
+      this.close();
     };
     this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
@@ -177,11 +225,29 @@ export class HeaderComponent {
     update(this.router.url);
 
     if (typeof window !== 'undefined') {
-      window.addEventListener('scroll', () => {
-        this.scrolled = window.scrollY > 20;
-      }, { passive: true });
+      window.addEventListener('scroll', this.onScroll, { passive: true });
     }
   }
 
-  close() { this.open = false; }
+  ngOnDestroy() {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('scroll', this.onScroll);
+      document.body.style.overflow = '';
+    }
+  }
+
+  toggle() {
+    this.open = !this.open;
+    this.syncBodyScroll();
+  }
+
+  close() {
+    this.open = false;
+    this.syncBodyScroll();
+  }
+
+  private syncBodyScroll() {
+    if (typeof document === 'undefined') return;
+    document.body.style.overflow = this.open ? 'hidden' : '';
+  }
 }
