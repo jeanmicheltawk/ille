@@ -21,7 +21,7 @@ interface StatGroup {
     <div class="model-page" *ngIf="model">
       <div class="digitals-wrap">
         <header class="digitals-header">
-          <a class="name" [routerLink]="['/model', model.id]">{{ model.name }}</a>
+          <a class="name" [routerLink]="['/', model.id]">{{ model.name }}</a>
         </header>
 
         <p class="stats-bar" *ngFor="let group of statGroups">

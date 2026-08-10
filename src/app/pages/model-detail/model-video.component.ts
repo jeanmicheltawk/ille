@@ -17,7 +17,7 @@ import { ModelProfileLinksComponent } from './model-profile-links.component';
     <div class="model-page" *ngIf="model && embed">
       <div class="container layout">
         <aside class="layout__side">
-          <a class="back" [routerLink]="['/model', model.id]">{{ model.name }}</a>
+          <a class="back" [routerLink]="['/', model.id]">{{ model.name }}</a>
           <p class="video-label">{{ videoLabel }}</p>
           <app-model-profile-links [model]="model" />
         </aside>
@@ -39,7 +39,7 @@ import { ModelProfileLinksComponent } from './model-profile-links.component';
     <div class="model-page not-found" *ngIf="!loading && (!model || !embed)">
       <div class="container">
         <p>{{ model ? 'Video not available.' : 'Model not found.' }}</p>
-        <a [routerLink]="model ? ['/model', model.id] : ['/models']" class="back-link">Go back</a>
+        <a [routerLink]="model ? ['/', model.id] : ['/models']" class="back-link">Go back</a>
       </div>
     </div>
   `,

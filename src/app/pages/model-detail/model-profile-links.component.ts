@@ -15,10 +15,10 @@ import { MediaUrlPipe } from '../../shared/media-url.pipe';
       <a *ngIf="model.pdfUrl" [href]="model.pdfUrl | mediaUrl" download target="_blank" rel="noopener noreferrer">
         Download PDF
       </a>
-      <a *ngIf="model.introVideoUrl" [routerLink]="['/model', model.id, 'intro-video']">
+      <a *ngIf="model.introVideoUrl" [routerLink]="['/', model.id, 'intro-video']">
         Introduction Video
       </a>
-      <a *ngIf="model.catwalkVideoUrl" [routerLink]="['/model', model.id, 'catwalk-video']">
+      <a *ngIf="model.catwalkVideoUrl" [routerLink]="['/', model.id, 'catwalk-video']">
         Catwalk Video
       </a>
     </nav>

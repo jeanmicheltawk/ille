@@ -28,23 +28,6 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/models/models.component').then((m) => m.ModelsComponent),
   },
   {
-    path: 'model/:id',
-    loadComponent: () =>
-      import('./pages/model-detail/model-detail.component').then((m) => m.ModelDetailComponent),
-  },
-  {
-    path: 'model/:id/intro-video',
-    loadComponent: () =>
-      import('./pages/model-detail/model-video.component').then((m) => m.ModelVideoComponent),
-    data: { videoKind: 'intro' },
-  },
-  {
-    path: 'model/:id/catwalk-video',
-    loadComponent: () =>
-      import('./pages/model-detail/model-video.component').then((m) => m.ModelVideoComponent),
-    data: { videoKind: 'catwalk' },
-  },
-  {
     path: 'become-a-model',
     loadComponent: () =>
       import('./pages/become-a-model/become-a-model.component').then((m) => m.BecomeAModelComponent),
@@ -93,5 +76,25 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./pages/model-detail/model-digitals.component').then((m) => m.ModelDigitalsComponent),
   },
+  {
+    path: ':id/intro-video',
+    loadComponent: () =>
+      import('./pages/model-detail/model-video.component').then((m) => m.ModelVideoComponent),
+    data: { videoKind: 'intro' },
+  },
+  {
+    path: ':id/catwalk-video',
+    loadComponent: () =>
+      import('./pages/model-detail/model-video.component').then((m) => m.ModelVideoComponent),
+    data: { videoKind: 'catwalk' },
+  },
+  {
+    path: ':id',
+    loadComponent: () =>
+      import('./pages/model-detail/model-detail.component').then((m) => m.ModelDetailComponent),
+  },
+  { path: 'model/:id/intro-video', redirectTo: '/:id/intro-video' },
+  { path: 'model/:id/catwalk-video', redirectTo: '/:id/catwalk-video' },
+  { path: 'model/:id', redirectTo: '/:id' },
   { path: '**', redirectTo: '' },
 ];
