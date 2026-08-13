@@ -655,40 +655,69 @@ app.get('/api/admin/applications', requireAuth, async (req, res) => {
 // ============================================================
 // BOOKINGS — public JSON with dynamic fields
 // ============================================================
-app.post('/api/bookings', async (req, res) => {
-  const b = req.body || {};
-  const data = { ...(b.data && typeof b.data === 'object' ? b.data : b) };
-  if (b.modelId) data.modelId = b.modelId;
+function firstText(...values) {
+  for (const value of values) {
+    if (value == null) continue;
+    const text = String(value).trim();
+    if (text) return text;
+  }
+  return '';
+}
 
-  const { rows } = await query(`
-    INSERT INTO bookings ("modelId", "clientName", company, email, phone,
-      "jobType", dates, location, budget, message)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-    RETURNING id
-  `, [
-    data.modelId || null,
-    data.clientName || null,
-    data.company || null,
-    data.email || null,
-    data.phone || null,
-    data.jobType || null,
-    data.dates || null,
-    data.location || null,
-    data.budget || null,
-    data.message || null,
-  ]);
-  await saveBookingExtras(rows[0].id, data);
-  res.json({ ok: true });
-  email.sendBookingNotification(data).catch((err) =>
-    console.error('[email] booking notification failed:', err),
-  );
-  const clientEmail = email.extractEmail(data);
-  if (clientEmail) {
-    email.sendFormConfirmation(clientEmail, {
-      kind: 'booking',
-      title: 'booking enquiry',
-      name: data.clientName || '',
-    }).catch((err) => console.error('[email] booking confirmation failed:', err));
+app.post('/api/bookings', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const data = { ...(b.data && typeof b.data === 'object' ? b.data : b) };
+    if (b.modelId) data.modelId = b.modelId;
+
+    // bookings.clientName / email are NOT NULL. Custom /book forms often drop
+    // those original field ids, so fall back rather than inserting null (which
+    // crashed the async handler and surfaced as nginx 502).
+    const clientName = firstText(
+      data.clientName,
+      data.name,
+      data.fullName,
+      [data.firstName, data.lastName].filter(Boolean).join(' '),
+      data.company,
+    );
+    const clientEmail = firstText(data.email, email.extractEmail(data));
+
+    const { rows } = await query(`
+      INSERT INTO bookings ("modelId", "clientName", company, email, phone,
+        "jobType", dates, location, budget, message)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING id
+    `, [
+      data.modelId || null,
+      clientName,
+      data.company || null,
+      clientEmail,
+      data.phone || null,
+      data.jobType || null,
+      data.dates || null,
+      data.location || null,
+      data.budget || null,
+      data.message || null,
+    ]);
+    await saveBookingExtras(rows[0].id, data);
+    res.json({ ok: true });
+
+    const form = await getSiteForm('book-a-model').catch(() => null);
+    email.sendBookingNotification(data, form?.formFields).catch((err) =>
+      console.error('[email] booking notification failed:', err),
+    );
+    if (clientEmail) {
+      email.sendFormConfirmation(clientEmail, {
+        kind: 'booking',
+        title: 'booking enquiry',
+        name: clientName,
+      }).catch((err) => console.error('[email] booking confirmation failed:', err));
+    }
+  } catch (err) {
+    console.error('Booking submit failed:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Could not submit booking. Please try again.' });
+    }
   }
 });
 

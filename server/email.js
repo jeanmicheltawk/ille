@@ -484,21 +484,12 @@ function formatSubmissionPairs(data, formFields) {
   return pairs;
 }
 
-async function sendBookingNotification(booking) {
+async function sendBookingNotification(booking, formFields) {
   const to = NOTIFY_TO;
-  const subject = `New booking enquiry — ${booking.clientName || 'Unknown'}`;
-  const rows = fieldRowsHtml([
-    ['Client', booking.clientName],
-    ['Company', booking.company],
-    ['Email', booking.email],
-    ['Phone', booking.phone],
-    ['Job Type', booking.jobType],
-    ['Location', booking.location],
-    ['Dates', booking.dates],
-    ['Budget', booking.budget],
-    ['Model ID', booking.modelId],
-    ['Message', booking.message],
-  ]);
+  const name = booking.clientName || booking.company || booking.email || 'Unknown';
+  const subject = `New booking enquiry — ${name}`;
+  const pairs = formatSubmissionPairs(booking, formFields);
+  const rows = fieldRowsHtml(pairs);
   const html = wrapHtml(`
     <p>A new booking enquiry has been submitted.</p>
     <table style="border-collapse:collapse;">${rows}</table>
@@ -506,7 +497,7 @@ async function sendBookingNotification(booking) {
   const text = [
     'New booking enquiry submitted.',
     '',
-    ...Object.entries(booking).filter(([, v]) => v).map(([k, v]) => `${k}: ${v}`),
+    ...pairs.map(([k, v]) => `${k}: ${v}`),
   ].join('\n');
   console.log('[email] sendBookingNotification', { to, subject });
   return sendMail({ to, subject, html, text });

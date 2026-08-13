@@ -81,7 +81,7 @@ export class BookAModelComponent implements OnInit {
       await this.subs.submitBooking(this.booking, payload.values);
       this.done = true;
     } catch (e: any) {
-      this.error = e?.message ?? 'Something went wrong. Please try again.';
+      this.error = e?.error?.error ?? e?.message ?? 'Something went wrong. Please try again.';
     } finally {
       this.busy = false;
     }
