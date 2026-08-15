@@ -15,6 +15,7 @@ import {
 import { buildServiceSections } from '../../core/service-sections.util';
 import { ServiceFormBuilderComponent } from './service-form-builder.component';
 import { ToastService } from '../../shared/toast.service';
+import { FormEntryValueComponent } from '../../shared/form-entry-value.component';
 
 interface TypeOption {
   value: ServiceItemType;
@@ -31,9 +32,19 @@ interface ListGroup {
 @Component({
   selector: 'app-admin-services',
   standalone: true,
-  imports: [CommonModule, FormsModule, ServiceFormBuilderComponent],
+  imports: [CommonModule, FormsModule, ServiceFormBuilderComponent, FormEntryValueComponent],
   template: `
     <div class="svc-admin">
+      <nav class="dash__subtabs">
+        <button type="button" [class.on]="svcSubTab==='page'" (click)="svcSubTab='page'">
+          Services page
+        </button>
+        <button type="button" [class.on]="svcSubTab==='bookings'" (click)="svcSubTab='bookings'">
+          Client bookings ({{ submissions.length }})
+        </button>
+      </nav>
+
+      <ng-container *ngIf="svcSubTab==='page'">
       <!-- Intro -->
       <div class="intro">
         <h2>Services page</h2>
@@ -181,9 +192,10 @@ interface ListGroup {
           </form>
         </div>
       </div>
+      </ng-container>
 
       <!-- Submissions -->
-      <section class="subs">
+      <section class="subs" *ngIf="svcSubTab==='bookings'">
         <div class="subs__head">
           <div>
             <h3>Client bookings ({{ submissions.length }})</h3>
@@ -231,7 +243,7 @@ interface ListGroup {
           <dl class="sub-modal__data">
             <div *ngFor="let entry of submissionEntries(viewing)">
               <dt>{{ entry.label }}</dt>
-              <dd>{{ entry.value }}</dd>
+              <dd><app-form-entry-value [value]="entry.value" /></dd>
             </div>
           </dl>
           <div class="sub-modal__actions">
@@ -245,6 +257,28 @@ interface ListGroup {
   `,
   styles: [`
     .svc-admin { max-width: 1200px; }
+    .dash__subtabs {
+      display: flex;
+      gap: 0;
+      margin: 0 0 28px;
+      border-bottom: 1px solid var(--line);
+    }
+    .dash__subtabs button {
+      background: none;
+      border: 0;
+      padding: 10px 18px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 10px;
+      font-weight: 300;
+      color: var(--ink-muted);
+      border-bottom: 1px solid transparent;
+      margin-bottom: -1px;
+      transition: color 0.3s ease, border-color 0.3s ease;
+    }
+    .dash__subtabs button.on { color: var(--ink); border-color: var(--ink-soft); }
+    .dash__subtabs button:hover { color: var(--ink); }
     .intro { margin-bottom: 28px; }
     .intro h2 { font-size: 20px; font-weight: 200; margin: 0 0 8px; }
     .intro p { font-size: 14px; color: var(--ink-soft); margin: 0; font-weight: 200; line-height: 1.6; }
@@ -353,7 +387,7 @@ interface ListGroup {
       margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--line);
     }
     .save-hint { font-size: 11px; color: var(--ink-muted); }
-    .subs { margin-top: 48px; padding-top: 32px; border-top: 1px solid var(--line); }
+    .subs { margin-top: 0; padding-top: 0; }
     .subs__head {
       display: flex;
       justify-content: space-between;
@@ -500,6 +534,7 @@ interface ListGroup {
   `],
 })
 export class AdminServicesComponent implements OnInit {
+  svcSubTab: 'page' | 'bookings' = 'page';
   items: ServiceItem[] = [];
   submissions: ServiceSubmission[] = [];
   editing: ServiceItem = this.blank();

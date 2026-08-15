@@ -64,16 +64,6 @@ function getTransporter(account = 'bookings') {
   }
   if (!transporters[account]) {
     const cfg = smtpConfig(account);
-    console.log('[email] creating transporter', {
-      account,
-      host: cfg.host,
-      port: cfg.port,
-      secure: cfg.secure,
-      user: cfg.user,
-      passSet: !!cfg.pass,
-      // force IPv4 — Office365 often returns IPv6 that fails with ENETUNREACH on Windows
-      family: 4,
-    });
     transporters[account] = nodemailer.createTransport({
       host: cfg.host,
       port: cfg.port,
@@ -81,8 +71,6 @@ function getTransporter(account = 'bookings') {
       // Prefer IPv4 so smtp.office365.com does not hang on unreachable IPv6
       family: 4,
       auth: { user: cfg.user, pass: cfg.pass },
-      logger: true,
-      debug: true,
       connectionTimeout: 15000,
       greetingTimeout: 15000,
       socketTimeout: 15000,
@@ -191,14 +179,6 @@ async function sendMailOnce(account, { to, subject, html, text, fromOverride = n
   const logo = logoAttachment();
   if (logo) attachments.push(logo);
 
-  console.log('[email] sendMail start', {
-    account,
-    authUser: cfg.user,
-    from,
-    to,
-    subject,
-    logoAttached: !!logo,
-  });
   const info = await t.sendMail({
     from,
     sender: from,
@@ -208,16 +188,6 @@ async function sendMailOnce(account, { to, subject, html, text, fromOverride = n
     html,
     text,
     attachments,
-  });
-  console.log('[email] sendMail ok', {
-    account,
-    authUser: cfg.user,
-    from,
-    messageId: info.messageId,
-    response: info.response,
-    accepted: info.accepted,
-    rejected: info.rejected,
-    envelope: info.envelope,
   });
   return { ok: true, messageId: info.messageId, account, from, authUser: cfg.user };
 }
@@ -235,25 +205,10 @@ async function sendMail({ to, subject, html, text, account = 'bookings' }) {
     return sendMailOnce(account, payload);
   }
 
-  console.log('[email] INFO SEND requested', {
-    to,
-    subject,
-    infoConfigured: isConfigured('info'),
-    bookingsConfigured: isConfigured('bookings'),
-    INFO_FROM,
-    INFO_SMTP_USER: process.env.INFO_SMTP_USER || null,
-    INFO_SMTP_PASS_SET: !!process.env.INFO_SMTP_PASS,
-  });
-
   // Attempt 1: login as info@ille.co
   try {
     transporters.info = null; // force fresh transporter (SMTP AUTH may have just been enabled)
     const result = await sendMailOnce('info', payload);
-    console.log('[email] INFO SEND success via info SMTP login', {
-      to,
-      from: result.from,
-      authUser: result.authUser,
-    });
     return result;
   } catch (err) {
     console.error('[email] INFO SEND attempt1 (info login) FAILED', {
@@ -271,18 +226,10 @@ async function sendMail({ to, subject, html, text, account = 'bookings' }) {
     throw new Error('info@ille.co SMTP failed and bookings SMTP is not configured');
   }
 
-  console.warn(
-    '[email] INFO SEND attempt2 — auth as bookings@ille.co but From/Reply-To stay info@ille.co',
-  );
   try {
     const result = await sendMailOnce('bookings', {
       ...payload,
       fromOverride: INFO_FROM,
-    });
-    console.log('[email] INFO SEND success via bookings auth + From info@ille.co', {
-      to,
-      from: result.from,
-      authUser: result.authUser,
     });
     return result;
   } catch (err) {
@@ -299,22 +246,13 @@ async function sendMail({ to, subject, html, text, account = 'bookings' }) {
 }
 
 async function verifyInfoSmtp() {
-  console.log('[email] verifyInfoSmtp start', {
-    configured: isConfigured('info'),
-    user: process.env.INFO_SMTP_USER || null,
-    passSet: !!process.env.INFO_SMTP_PASS,
-    from: INFO_FROM,
-    host: process.env.INFO_SMTP_HOST || process.env.SMTP_HOST || null,
-  });
   if (!isConfigured('info')) {
-    console.warn('[email] verifyInfoSmtp SKIP — INFO_SMTP_* not set');
     return { ok: false, reason: 'not_configured' };
   }
   try {
     transporters.info = null;
     const t = getTransporter('info');
     await t.verify();
-    console.log('[email] verifyInfoSmtp OK — info@ille.co can authenticate via SMTP');
     return { ok: true };
   } catch (err) {
     console.error('[email] verifyInfoSmtp FAILED', {
@@ -385,15 +323,6 @@ async function sendWelcome(email, token, topic = 'models') {
 async function sendNewModelNotice(email, token, model) {
   const profileUrl = `${SITE_URL}/model/${encodeURIComponent(model.id)}`;
   const subject = `New model — ${model.name}`;
-  console.log('[email] sendNewModelNotice start', {
-    to: email,
-    modelId: model?.id,
-    modelName: model?.name,
-    profileUrl,
-    account: 'info',
-    infoConfigured: isConfigured('info'),
-    from: INFO_FROM,
-  });
   const html = wrapHtml(`
     <p style="margin:0 0 18px 0;font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.35;color:#1a1a1a;">
       A new face joins ille
@@ -415,9 +344,7 @@ async function sendNewModelNotice(email, token, model) {
   ].join('\n');
   // New-model notices go out from info@ille.co
   try {
-    const result = await sendMail({ to: email, subject, html, text, account: 'info' });
-    console.log('[email] sendNewModelNotice result', { to: email, result });
-    return result;
+    return await sendMail({ to: email, subject, html, text, account: 'info' });
   } catch (err) {
     console.error('[email] sendNewModelNotice error', {
       to: email,
@@ -499,7 +426,6 @@ async function sendBookingNotification(booking, formFields) {
     '',
     ...pairs.map(([k, v]) => `${k}: ${v}`),
   ].join('\n');
-  console.log('[email] sendBookingNotification', { to, subject });
   return sendMail({ to, subject, html, text });
 }
 
@@ -548,7 +474,6 @@ async function sendServiceSubmissionNotification(service, data) {
     '',
     ...pairs.map(([k, v]) => `${k}: ${v}`),
   ].join('\n');
-  console.log('[email] sendServiceSubmissionNotification', { to, subject });
   return sendMail({ to, subject, html, text, account: 'info' });
 }
 
@@ -600,19 +525,13 @@ async function notifySubscribers(subscribers, sendFn) {
   let sent = 0;
   let skipped = 0;
   let failed = 0;
-  console.log('[email] notifySubscribers start', {
-    total: subscribers.length,
-    emails: subscribers.map((sub) => sub.email),
-  });
   for (const sub of subscribers) {
     try {
       const result = await sendFn(sub);
       if (result?.skipped) {
         skipped++;
-        console.log('[email] notifySubscribers skipped', { email: sub.email, result });
       } else {
         sent++;
-        console.log('[email] notifySubscribers sent', { email: sub.email, result });
       }
     } catch (err) {
       failed++;
@@ -624,9 +543,7 @@ async function notifySubscribers(subscribers, sendFn) {
       });
     }
   }
-  const summary = { sent, skipped, failed, total: subscribers.length };
-  console.log('[email] notifySubscribers done', summary);
-  return summary;
+  return { sent, skipped, failed, total: subscribers.length };
 }
 
 module.exports = {

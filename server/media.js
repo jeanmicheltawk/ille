@@ -75,12 +75,12 @@ async function storeFile(queryFn, file) {
 
 async function fetchMedia(queryFn, id) {
   const { rows } = await queryFn(
-    'SELECT id, mime_type, data FROM media_files WHERE id = $1',
+    'SELECT id, filename, mime_type, data FROM media_files WHERE id = $1',
     [id],
   );
   const row = rows[0];
   if (!row) return null;
-  return { id: row.id, mimeType: row.mime_type, data: row.data };
+  return { id: row.id, filename: row.filename, mimeType: row.mime_type, data: row.data };
 }
 
 /** Collect the media IDs referenced by any mix of refs / arrays of refs. */

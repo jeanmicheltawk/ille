@@ -29,11 +29,12 @@ import { SiteFormsService } from '../../core/site-forms.service';
 import { SiteFormConfig } from '../../core/models.types';
 import { displayTitleFromData } from '../../core/form-field.util';
 import { ToastService } from '../../shared/toast.service';
+import { FormEntryValueComponent } from '../../shared/form-entry-value.component';
 
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, AdminServicesComponent, AdminCategoriesComponent, AdminSubscribersComponent, AdminSiteFormEditorComponent, FileUploadComponent],
+  imports: [CommonModule, FormsModule, AdminServicesComponent, AdminCategoriesComponent, AdminSubscribersComponent, AdminSiteFormEditorComponent, FileUploadComponent, FormEntryValueComponent],
   template: `
     <div class="container dash">
       <div class="dash__top">
@@ -90,7 +91,17 @@ import { ToastService } from '../../shared/toast.service';
 
       <!-- APPLICATIONS -->
       <section *ngIf="tab==='apps'">
+        <nav class="dash__subtabs">
+          <button type="button" [class.on]="appsSubTab==='list'" (click)="appsSubTab='list'">
+            Applications ({{ apps.length }})
+          </button>
+          <button type="button" [class.on]="appsSubTab==='form'" (click)="appsSubTab='form'">
+            Edit form
+          </button>
+        </nav>
+
         <app-admin-site-form-editor
+          *ngIf="appsSubTab==='form'"
           formId="become-a-model"
           title="Edit Become a Model form"
           [showRules]="true"
@@ -98,78 +109,92 @@ import { ToastService } from '../../shared/toast.service';
           (saved)="onApplicationFormSaved($event)"
         />
 
-        <div class="forms-head">
-          <div>
-            <h3>Become a model applications ({{ apps.length }})</h3>
-            <p class="muted" *ngIf="!configured">
-              Applications appear here once the backend is connected.
-            </p>
-          </div>
-          <div class="forms-head__actions" *ngIf="apps.length">
-            <button type="button" class="btn btn--ghost btn--sm" (click)="exportAllAppsPdf()">Download all PDF</button>
-            <button type="button" class="btn btn--ghost btn--sm" (click)="exportAllAppsExcel()">Download all Excel</button>
-          </div>
-        </div>
-        <p class="muted" *ngIf="configured && !apps.length">No applications yet.</p>
-        <div class="form-card" *ngFor="let a of apps">
-          <div class="form-card__head">
+        <ng-container *ngIf="appsSubTab==='list'">
+          <div class="forms-head">
             <div>
-              <strong>{{ appTitle(a) }}</strong>
-              <span class="form-card__meta">{{ a.createdAt || 'Just now' }}</span>
+              <h3>Become a model applications ({{ apps.length }})</h3>
+              <p class="muted" *ngIf="!configured">
+                Applications appear here once the backend is connected.
+              </p>
             </div>
-            <div class="form-card__actions">
-              <button type="button" (click)="viewApp(a)">View</button>
-              <button type="button" (click)="exportAppPdf(a)">PDF</button>
-              <button type="button" (click)="exportAppExcel(a)">Excel</button>
+            <div class="forms-head__actions" *ngIf="apps.length">
+              <button type="button" class="btn btn--ghost btn--sm" (click)="exportAllAppsPdf()">Download all PDF</button>
+              <button type="button" class="btn btn--ghost btn--sm" (click)="exportAllAppsExcel()">Download all Excel</button>
             </div>
           </div>
-          <dl class="form-card__data">
-            <div *ngFor="let entry of appPreview(a)">
-              <dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd>
+          <p class="muted" *ngIf="configured && !apps.length">No applications yet.</p>
+          <div class="form-card" *ngFor="let a of apps">
+            <div class="form-card__head">
+              <div>
+                <strong>{{ appTitle(a) }}</strong>
+                <span class="form-card__meta">{{ a.createdAt || 'Just now' }}</span>
+              </div>
+              <div class="form-card__actions">
+                <button type="button" (click)="viewApp(a)">View</button>
+                <button type="button" (click)="exportAppPdf(a)">PDF</button>
+                <button type="button" (click)="exportAppExcel(a)">Excel</button>
+              </div>
             </div>
-          </dl>
-        </div>
+            <dl class="form-card__data">
+              <div *ngFor="let entry of appPreview(a)">
+                <dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd>
+              </div>
+            </dl>
+          </div>
+        </ng-container>
       </section>
 
       <!-- BOOKINGS -->
       <section *ngIf="tab==='bookings'">
+        <nav class="dash__subtabs">
+          <button type="button" [class.on]="bookingsSubTab==='list'" (click)="bookingsSubTab='list'">
+            Enquiries ({{ bookings.length }})
+          </button>
+          <button type="button" [class.on]="bookingsSubTab==='form'" (click)="bookingsSubTab='form'">
+            Edit form
+          </button>
+        </nav>
+
         <app-admin-site-form-editor
+          *ngIf="bookingsSubTab==='form'"
           formId="book-a-model"
           title="Edit Book a Model form"
           (saved)="onBookingFormSaved($event)"
         />
 
-        <div class="forms-head">
-          <div>
-            <h3>Model booking enquiries ({{ bookings.length }})</h3>
-            <p class="muted" *ngIf="!configured">
-              Booking enquiries appear here once the backend is connected.
-            </p>
-          </div>
-          <div class="forms-head__actions" *ngIf="bookings.length">
-            <button type="button" class="btn btn--ghost btn--sm" (click)="exportAllBookingsPdf()">Download all PDF</button>
-            <button type="button" class="btn btn--ghost btn--sm" (click)="exportAllBookingsExcel()">Download all Excel</button>
-          </div>
-        </div>
-        <p class="muted" *ngIf="configured && !bookings.length">No bookings yet.</p>
-        <div class="form-card" *ngFor="let b of bookings">
-          <div class="form-card__head">
+        <ng-container *ngIf="bookingsSubTab==='list'">
+          <div class="forms-head">
             <div>
-              <strong>{{ bookingTitle(b) }}</strong>
-              <span class="form-card__meta">{{ b.createdAt || 'Just now' }}</span>
+              <h3>Model booking enquiries ({{ bookings.length }})</h3>
+              <p class="muted" *ngIf="!configured">
+                Booking enquiries appear here once the backend is connected.
+              </p>
             </div>
-            <div class="form-card__actions">
-              <button type="button" (click)="viewBooking(b)">View</button>
-              <button type="button" (click)="exportBookingPdf(b)">PDF</button>
-              <button type="button" (click)="exportBookingExcel(b)">Excel</button>
+            <div class="forms-head__actions" *ngIf="bookings.length">
+              <button type="button" class="btn btn--ghost btn--sm" (click)="exportAllBookingsPdf()">Download all PDF</button>
+              <button type="button" class="btn btn--ghost btn--sm" (click)="exportAllBookingsExcel()">Download all Excel</button>
             </div>
           </div>
-          <dl class="form-card__data">
-            <div *ngFor="let entry of bookingPreview(b)">
-              <dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd>
+          <p class="muted" *ngIf="configured && !bookings.length">No bookings yet.</p>
+          <div class="form-card" *ngFor="let b of bookings">
+            <div class="form-card__head">
+              <div>
+                <strong>{{ bookingTitle(b) }}</strong>
+                <span class="form-card__meta">{{ b.createdAt || 'Just now' }}</span>
+              </div>
+              <div class="form-card__actions">
+                <button type="button" (click)="viewBooking(b)">View</button>
+                <button type="button" (click)="exportBookingPdf(b)">PDF</button>
+                <button type="button" (click)="exportBookingExcel(b)">Excel</button>
+              </div>
             </div>
-          </dl>
-        </div>
+            <dl class="form-card__data">
+              <div *ngFor="let entry of bookingPreview(b)">
+                <dt>{{ entry.label }}</dt><dd>{{ entry.value }}</dd>
+              </div>
+            </dl>
+          </div>
+        </ng-container>
       </section>
 
       <!-- SERVICES -->
@@ -194,7 +219,7 @@ import { ToastService } from '../../shared/toast.service';
           <dl class="form-modal__data">
             <div *ngFor="let entry of viewingForm.entries">
               <dt>{{ entry.label }}</dt>
-              <dd>{{ entry.value }}</dd>
+              <dd><app-form-entry-value [value]="entry.value" /></dd>
             </div>
           </dl>
           <div class="form-modal__actions">
@@ -420,6 +445,28 @@ import { ToastService } from '../../shared/toast.service';
     }
     .dash__tabs button.on { color: var(--accent); border-color: var(--accent); }
     .dash__tabs button:hover { color: var(--ink); }
+    .dash__subtabs {
+      display: flex;
+      gap: 0;
+      margin: -12px 0 28px;
+      border-bottom: 1px solid var(--line);
+    }
+    .dash__subtabs button {
+      background: none;
+      border: 0;
+      padding: 10px 18px;
+      cursor: pointer;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 10px;
+      font-weight: 300;
+      color: var(--ink-muted);
+      border-bottom: 1px solid transparent;
+      margin-bottom: -1px;
+      transition: color 0.3s ease, border-color 0.3s ease;
+    }
+    .dash__subtabs button.on { color: var(--ink); border-color: var(--ink-soft); }
+    .dash__subtabs button:hover { color: var(--ink); }
     .action-feedback {
       margin: 0 0 20px;
       border: 1px solid var(--line);
@@ -705,6 +752,8 @@ export class AdminDashboardComponent implements OnInit {
   @ViewChildren('mediaUpload') mediaUploads!: QueryList<FileUploadComponent>;
 
   tab: 'models' | 'categories' | 'apps' | 'bookings' | 'subscribers' | 'services' = 'models';
+  appsSubTab: 'list' | 'form' = 'list';
+  bookingsSubTab: 'list' | 'form' = 'list';
   models: Model[] = [];
   categories: ModelCategory[] = [];
   apps: ModelApplication[] = [];

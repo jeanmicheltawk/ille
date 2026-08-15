@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { DynamicFormComponent } from '../../shared/dynamic-form.component';
 import { SubmissionsService } from '../../core/submissions.service';
 import { SiteFormsService } from '../../core/site-forms.service';
-import { SiteFormConfig } from '../../core/models.types';
+import { ServiceFormField, SiteFormConfig } from '../../core/models.types';
 
 @Component({
   selector: 'app-become-a-model',
@@ -28,6 +28,7 @@ import { SiteFormConfig } from '../../core/models.types';
       <app-dynamic-form
         *ngIf="!done && formConfig"
         [fields]="formConfig.formFields"
+        [fileExamples]="shotExamples"
         [submitLabel]="formConfig.submitLabel"
         [busy]="busy"
         (submitted)="submit($event)"
@@ -52,6 +53,7 @@ import { SiteFormConfig } from '../../core/models.types';
 })
 export class BecomeAModelComponent implements OnInit {
   formConfig: SiteFormConfig | null = null;
+  shotExamples: Record<string, string> = {};
   busy = false;
   done = false;
   error = '';
@@ -63,6 +65,24 @@ export class BecomeAModelComponent implements OnInit {
 
   async ngOnInit() {
     this.formConfig = await this.forms.get('become-a-model');
+    this.shotExamples = this.buildShotExamples(this.formConfig?.formFields || []);
+  }
+
+  private buildShotExamples(fields: ServiceFormField[]): Record<string, string> {
+    const examples: [RegExp, string][] = [
+      [/full/, 'assets/full-shot.jpeg'],
+      [/half/, 'assets/half-shot.jpeg'],
+      [/close/, 'assets/close-up.jpeg'],
+      [/profile/, 'assets/profile.jpeg'],
+    ];
+    const map: Record<string, string> = {};
+    for (const field of fields) {
+      if (field.type !== 'file') continue;
+      const text = `${field.id} ${field.label}`.toLowerCase();
+      const match = examples.find(([re]) => re.test(text));
+      if (match) map[field.id] = match[1];
+    }
+    return map;
   }
 
   async submit(payload: { values: Record<string, string>; files: Record<string, File> }) {

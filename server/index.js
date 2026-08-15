@@ -59,8 +59,17 @@ function requireAuth(req, res, next) {
 app.get('/api/media/:id', async (req, res) => {
   const media = await fetchMedia(query, req.params.id);
   if (!media) return res.status(404).send('Not found');
+  const filename = String(media.filename || req.params.id)
+    .replace(/["\r\n\\]/g, '')
+    .replace(/[^\w.\-]+/g, '_')
+    .slice(0, 120) || req.params.id;
+  const asDownload = req.query.download != null && req.query.download !== '0';
   res.setHeader('Content-Type', media.mimeType);
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.setHeader(
+    'Content-Disposition',
+    `${asDownload ? 'attachment' : 'inline'}; filename="${filename}"`,
+  );
   res.send(media.data);
 });
 
@@ -93,40 +102,13 @@ async function activeSubscribers(topic = null) {
     sql += ' AND topic = $1';
   }
   const { rows } = await query(sql, params);
-  console.log('[email] activeSubscribers query', {
-    topic: topic || 'all',
-    activeTotal: rows.length,
-    samples: rows.slice(0, 5).map((sub) => ({
-      email: sub.email,
-      source: sub.source,
-      topic: subscriberTopic(sub),
-      active: sub.active,
-    })),
-  });
-  if (topic && SUBSCRIBER_TOPICS.has(topic)) {
-    console.log('[email] activeSubscribers filtered', {
-      topic,
-      matched: rows.length,
-      emails: rows.map((sub) => sub.email),
-    });
-  }
   return rows;
 }
 
 function notifyNewModel(model) {
   const published = !!model?.published;
-  console.log('[email] notifyNewModel called', {
-    id: model?.id,
-    name: model?.name,
-    published,
-    rawPublished: model?.published,
-    infoSmtpConfigured: email.isConfigured('info'),
-    bookingsSmtpConfigured: email.isConfigured('bookings'),
-    siteUrl: email.siteUrl(),
-  });
 
   if (!published) {
-    console.log('[email] notifyNewModel SKIP — model is not published');
     return;
   }
 
@@ -134,27 +116,12 @@ function notifyNewModel(model) {
   activeSubscribers(null)
     .then((all) => {
       const subs = uniqueSubscribersByEmail(all, 'models');
-      console.log('[email] notifyNewModel subscribers ready', {
-        count: subs.length,
-        emails: subs.map((sub) => sub.email),
-        topics: subs.map((sub) => subscriberTopic(sub)),
-      });
       if (!subs.length) {
-        console.log('[email] notifyNewModel SKIP — no active subscribers');
         return null;
       }
-      return email.notifySubscribers(subs, (sub) => {
-        console.log('[email] notifyNewModel sending to', {
-          email: sub.email,
-          topic: subscriberTopic(sub),
-        });
-        return email.sendNewModelNotice(sub.email, sub.unsubscribeToken, model);
-      });
-    })
-    .then((result) => {
-      if (result) {
-        console.log('[email] notifyNewModel DONE', result);
-      }
+      return email.notifySubscribers(subs, (sub) =>
+        email.sendNewModelNotice(sub.email, sub.unsubscribeToken, model),
+      );
     })
     .catch((err) => {
       console.error('[email] notifyNewModel FAILED', {
@@ -372,12 +339,6 @@ app.post('/api/admin/models', requireAuth, async (req, res) => {
   try {
     const m = req.body;
     const s = serializeModel(m);
-    console.log('[models] POST /api/admin/models create', {
-      id: s.id,
-      name: s.name,
-      published: s.published,
-      bodyPublished: m?.published,
-    });
     await query(`
       INSERT INTO models (id, name, branch, category, height, bust, waist, hips, "shoeSize",
         hair, eyes, city, "outOfTown", instagram, "coverImage", gallery, digitals,
@@ -390,11 +351,9 @@ app.post('/api/admin/models', requireAuth, async (req, res) => {
     ]);
     await saveModelExtras({ ...m, id: s.id });
     res.json({ ok: true });
-    console.log('[models] create saved — triggering notifyNewModel');
     notifyNewModel({ ...m, id: s.id, name: s.name, published: s.published });
   } catch (err) {
     console.error('POST /api/admin/models failed:', err);
-    console.error('[email] notifyNewModel NOT called because create failed');
     res.status(500).json({ error: err.message || 'Failed to save model' });
   }
 });
@@ -1038,10 +997,6 @@ async function main() {
   await initDb();
   app.listen(PORT, () => {
     console.log(`ille API running on http://localhost:${PORT}`);
-    // Diagnose info@ille.co SMTP on boot (does not block startup).
-    email.verifyInfoSmtp().catch((err) =>
-      console.error('[email] verifyInfoSmtp crashed:', err?.message || err),
-    );
   });
 }
 

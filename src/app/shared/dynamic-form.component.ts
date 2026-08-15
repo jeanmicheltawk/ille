@@ -20,14 +20,20 @@ import { groupFormFields } from '../core/form-field.util';
             <div *ngIf="field.type === 'file'" class="dyn-form__field dyn-form__field--file"
                  [class.dyn-form__field--half]="field.width === 'half'">
               <label>{{ field.label }} <span class="req" *ngIf="field.required">*</span></label>
-              <label class="dyn-form__file-zone">
-                <input type="file" accept="image/*" (change)="onFile($event, field.id)" />
-                <figure class="dyn-form__file-preview" *ngIf="filePreviews[field.id]">
-                  <img [src]="filePreviews[field.id]" alt="" />
+              <div class="dyn-form__file-row">
+                <figure class="dyn-form__file-example" *ngIf="fileExample(field.id)">
+                  <img [src]="fileExample(field.id)" [alt]="'Example ' + field.label" />
+                  <figcaption>Example</figcaption>
                 </figure>
-                <span class="dyn-form__file-hint" *ngIf="!files[field.id]">Upload from your computer or phone</span>
-                <span class="dyn-form__file-state" *ngIf="files[field.id]">✓ {{ files[field.id]?.name }}</span>
-              </label>
+                <label class="dyn-form__file-zone">
+                  <input type="file" accept="image/*" (change)="onFile($event, field.id)" />
+                  <figure class="dyn-form__file-preview" *ngIf="filePreviews[field.id]">
+                    <img [src]="filePreviews[field.id]" alt="" />
+                  </figure>
+                  <span class="dyn-form__file-hint" *ngIf="!files[field.id]">Upload from your computer or phone</span>
+                  <span class="dyn-form__file-state" *ngIf="files[field.id]">✓ {{ files[field.id]?.name }}</span>
+                </label>
+              </div>
             </div>
 
             <div *ngIf="field.type !== 'info' && field.type !== 'file'" class="dyn-form__field"
@@ -136,14 +142,46 @@ import { groupFormFields } from '../core/form-field.util';
     .dyn-form__radios { display: flex; flex-direction: column; gap: 10px; }
     .dyn-form__radio { display: flex; align-items: center; gap: 10px; font-size: 13px; }
     .dyn-form__radio-help { margin: 0 0 8px; font-size: 12px; color: var(--ink-muted); }
+    .dyn-form__file-row {
+      display: flex;
+      align-items: stretch;
+      gap: 12px;
+    }
+    .dyn-form__file-example {
+      flex: 0 0 92px;
+      margin: 0;
+      width: 92px;
+    }
+    .dyn-form__file-example img {
+      width: 92px;
+      height: 122px;
+      object-fit: cover;
+      object-position: top;
+      display: block;
+      border: 1px solid var(--line);
+    }
+    .dyn-form__file-example figcaption {
+      margin-top: 6px;
+      font-size: 9px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--ink-muted);
+      text-align: center;
+      font-weight: 300;
+    }
     .dyn-form__file-zone {
       position: relative;
-      display: block;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      min-width: 0;
       border: 1px dashed var(--line);
       padding: 20px;
       text-align: center;
       cursor: pointer;
-      min-height: 120px;
+      min-height: 148px;
       transition: border-color 0.4s ease;
     }
     .dyn-form__file-zone:hover { border-color: var(--accent); }
@@ -182,6 +220,7 @@ import { groupFormFields } from '../core/form-field.util';
 })
 export class DynamicFormComponent implements OnChanges {
   @Input({ required: true }) fields: ServiceFormField[] = [];
+  @Input() fileExamples: Record<string, string> = {};
   @Input() submitLabel = 'Submit';
   @Input() busy = false;
   @Output() submitted = new EventEmitter<{ values: Record<string, string>; files: Record<string, File> }>();
@@ -204,6 +243,10 @@ export class DynamicFormComponent implements OnChanges {
     return (this.fields || [])
       .filter((f) => f.type === 'file' && f.required)
       .every((f) => !!this.files[f.id]);
+  }
+
+  fileExample(fieldId: string): string {
+    return this.fileExamples?.[fieldId] || '';
   }
 
   onFile(event: Event, fieldId: string) {
