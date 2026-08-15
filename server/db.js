@@ -132,10 +132,16 @@ function subscriberFromRow(row) {
   if (!row) return null;
   const rawSource = row.source || 'footer';
   const [baseSource, topicPart] = String(rawSource).split(':');
+  const topic =
+    row.topic === 'community' || row.topic === 'models'
+      ? row.topic
+      : topicPart === 'community'
+        ? 'community'
+        : 'models';
   return {
     id: row.id,
     email: row.email,
-    topic: topicPart === 'community' ? 'community' : 'models',
+    topic,
     active: !!row.active,
     source: baseSource || 'footer',
     subscribedAt: row.subscribedAt,

@@ -58,7 +58,7 @@ import { EmailSubscriber } from '../../core/models.types';
         <div class="broadcast__actions">
           <button type="button" class="btn" [disabled]="sending || !subject.trim() || !message.trim()"
             (click)="send()">
-            {{ sending ? 'Sending…' : 'Send to ' + subscribers.length + ' subscriber' + (subscribers.length === 1 ? '' : 's') }}
+            {{ sending ? 'Sending…' : 'Send to ' + sendCount + ' subscriber' + (sendCount === 1 ? '' : 's') }}
           </button>
         </div>
         <div *ngIf="sendResult" class="notice notice--ok">
@@ -267,6 +267,11 @@ export class AdminSubscribersComponent implements OnInit {
 
   constructor(private newsletter: NewsletterService) {}
 
+  get sendCount(): number {
+    if (this.topicFilter !== 'all') return this.subscribers.length;
+    return new Set(this.subscribers.map((s) => s.email)).size;
+  }
+
   async ngOnInit() {
     await this.refresh();
     const status = await this.newsletter.emailStatus();
@@ -285,7 +290,7 @@ export class AdminSubscribersComponent implements OnInit {
   }
 
   async remove(s: EmailSubscriber) {
-    if (!s.id || !confirm(`Remove ${s.email} from the list?`)) return;
+    if (!s.id || !confirm(`Remove ${s.email} from ${this.topicLabel(s.topic)}?`)) return;
     this.listNotice = '';
     this.listError = '';
     try {
@@ -299,7 +304,7 @@ export class AdminSubscribersComponent implements OnInit {
 
   async send() {
     if (!this.subject.trim() || !this.message.trim()) return;
-    if (!confirm(`Send this message to ${this.subscribers.length} subscriber(s)?`)) return;
+    if (!confirm(`Send this message to ${this.sendCount} subscriber(s)?`)) return;
     this.sending = true;
     this.sendError = '';
     this.sendResult = null;

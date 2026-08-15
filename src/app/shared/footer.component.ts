@@ -52,7 +52,7 @@ import { NewsletterService } from '../core/newsletter.service';
                 Pick the updates you want — new faces on the roster, or model camps and workshops.
               </p>
 
-              <form class="ftr__form" (ngSubmit)="subscribe()" *ngIf="!subscribed">
+              <form class="ftr__form" (ngSubmit)="subscribeRemaining()" *ngIf="!bothDone">
                 <label class="ftr__email-wrap">
                   <span class="ftr__email-label">Your email</span>
                   <input
@@ -66,21 +66,25 @@ import { NewsletterService } from '../core/newsletter.service';
                 </label>
                 <div class="ftr__topic-actions">
                   <button type="button" class="ftr__topic-btn ftr__topic-btn--models"
-                    [disabled]="loading || !email.trim()" (click)="subscribe('models')">
-                    <span class="ftr__topic-btn__label">Models' Update</span>
+                    [class.is-done]="done.models"
+                    [disabled]="loading || !email.trim() || done.models" (click)="subscribe('models')">
+                    <span class="ftr__topic-btn__label">{{ done.models ? "You're in" : "Models' Update" }}</span>
                     <span class="ftr__topic-btn__hint">Be the first to see our new faces</span>
                     <span class="ftr__topic-btn__state" *ngIf="loading && pendingTopic === 'models'">…</span>
+                    <span class="ftr__topic-btn__state" *ngIf="done.models">✓</span>
                   </button>
                   <button type="button" class="ftr__topic-btn ftr__topic-btn--community"
-                    [disabled]="loading || !email.trim()" (click)="subscribe('community')">
-                    <span class="ftr__topic-btn__label">Join our Community</span>
+                    [class.is-done]="done.community"
+                    [disabled]="loading || !email.trim() || done.community" (click)="subscribe('community')">
+                    <span class="ftr__topic-btn__label">{{ done.community ? "You're in" : 'Join our Community' }}</span>
                     <span class="ftr__topic-btn__hint">Be the first to know about our upcoming model camps and workshops</span>
                     <span class="ftr__topic-btn__state" *ngIf="loading && pendingTopic === 'community'">…</span>
+                    <span class="ftr__topic-btn__state" *ngIf="done.community">✓</span>
                   </button>
                 </div>
               </form>
 
-              <div class="ftr__newsletter-ok" *ngIf="subscribed">
+              <div class="ftr__newsletter-ok" *ngIf="subscribedMessage">
                 <span class="ftr__newsletter-ok__icon" aria-hidden="true">✓</span>
                 {{ subscribedMessage }}
               </div>
@@ -316,6 +320,13 @@ import { NewsletterService } from '../core/newsletter.service';
       transform: none;
       box-shadow: none;
     }
+    .ftr__topic-btn.is-done,
+    .ftr__topic-btn.is-done:disabled {
+      opacity: 1;
+      cursor: default;
+      border-color: rgba(201, 184, 150, 0.45);
+      background: rgba(201, 184, 150, 0.1);
+    }
     .ftr__newsletter-ok {
       display: flex;
       align-items: flex-start;
@@ -382,26 +393,39 @@ export class FooterComponent {
   year = new Date().getFullYear();
   email = '';
   loading = false;
-  subscribed = false;
+  done: Record<'models' | 'community', boolean> = { models: false, community: false };
   subscribedMessage = '';
   error = '';
   pendingTopic: 'models' | 'community' | null = null;
 
   constructor(private newsletter: NewsletterService) {}
 
+  get bothDone() {
+    return this.done.models && this.done.community;
+  }
+
+  subscribeRemaining() {
+    if (!this.done.models) {
+      void this.subscribe('models');
+      return;
+    }
+    if (!this.done.community) void this.subscribe('community');
+  }
+
   async subscribe(topic: 'models' | 'community' = 'models') {
     const value = this.email.trim();
-    if (!value) return;
+    if (!value || this.done[topic]) return;
     this.loading = true;
     this.pendingTopic = topic;
     this.error = '';
     try {
       await this.newsletter.subscribe(value, 'footer', topic);
-      this.subscribed = true;
-      this.subscribedMessage = topic === 'community'
-        ? "You're subscribed — we'll keep you first to know about model camps and workshops."
-        : "You're subscribed to Models' Update. Thank you.";
-      this.email = '';
+      this.done[topic] = true;
+      this.subscribedMessage = this.bothDone
+        ? "You're subscribed to Models' Update and our community. Thank you."
+        : topic === 'community'
+          ? "You're subscribed — we'll keep you first to know about model camps and workshops."
+          : "You're subscribed to Models' Update. You can also join our community with the same email.";
     } catch {
       this.error = 'Could not subscribe. Please try again.';
     } finally {
