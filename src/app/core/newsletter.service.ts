@@ -16,6 +16,16 @@ export interface EmailStatus {
 
 export type SubscriberTopic = 'models' | 'community';
 
+export interface SubscriberImportResult {
+  ok: boolean;
+  topic: SubscriberTopic;
+  added: number;
+  reactivated: number;
+  skipped: number;
+  invalid: number;
+  total: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class NewsletterService {
   private mockSubscribers: EmailSubscriber[] = [];
@@ -64,6 +74,38 @@ export class NewsletterService {
       return;
     }
     this.mockSubscribers = this.mockSubscribers.filter((s) => s.id !== id);
+  }
+
+  async importSubscribers(
+    emails: string,
+    topic: SubscriberTopic,
+  ): Promise<SubscriberImportResult> {
+    if (this.api.useApi) {
+      return this.api.post<SubscriberImportResult>('/admin/subscribers/import', { emails, topic });
+    }
+    const found = emails.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+    const seen = new Set<string>();
+    let added = 0;
+    let skipped = 0;
+    for (const match of found) {
+      const normalized = match.trim().toLowerCase();
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      if (this.mockSubscribers.some((s) => s.email === normalized && s.topic === topic)) {
+        skipped += 1;
+        continue;
+      }
+      this.mockSubscribers.push({
+        id: Date.now() + added,
+        email: normalized,
+        topic,
+        source: 'admin-import',
+        active: true,
+        subscribedAt: new Date().toISOString(),
+      });
+      added += 1;
+    }
+    return { ok: true, topic, added, reactivated: 0, skipped, invalid: 0, total: seen.size };
   }
 
   async sendBroadcast(

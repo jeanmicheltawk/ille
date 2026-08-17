@@ -75,7 +75,28 @@ app.get('/api/media/:id', async (req, res) => {
 });
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_EXTRACT_RE = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi;
 const SUBSCRIBER_TOPICS = new Set(['models', 'community']);
+const MAX_SUBSCRIBER_IMPORT = 5000;
+
+function parseEmailList(input) {
+  const text = Array.isArray(input) ? input.join('\n') : String(input || '');
+  const emails = [];
+  const seen = new Set();
+  const invalid = [];
+  const matches = text.match(EMAIL_EXTRACT_RE) || [];
+  for (const match of matches) {
+    const raw = match.trim().toLowerCase();
+    if (!EMAIL_RE.test(raw)) {
+      invalid.push(raw);
+      continue;
+    }
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    emails.push(raw);
+  }
+  return { emails, invalid };
+}
 
 function subscriberTopic(sub) {
   if (sub?.topic === 'community' || sub?.topic === 'models') return sub.topic;
@@ -1053,6 +1074,65 @@ app.get('/api/admin/subscribers', requireAuth, async (req, res) => {
   sql += ' ORDER BY "subscribedAt" DESC';
   const { rows } = await query(sql, params);
   res.json(rows.map(subscriberFromRow));
+});
+
+app.post('/api/admin/subscribers/import', requireAuth, async (req, res) => {
+  try {
+    const topic = (req.body?.topic || 'models').toString().trim().toLowerCase();
+    if (!SUBSCRIBER_TOPICS.has(topic)) {
+      return res.status(400).json({ error: 'Invalid subscription topic' });
+    }
+    const { emails, invalid } = parseEmailList(req.body?.emails ?? req.body?.text ?? '');
+    if (!emails.length) {
+      return res.status(400).json({ error: 'No valid email addresses found' });
+    }
+    if (emails.length > MAX_SUBSCRIBER_IMPORT) {
+      return res.status(400).json({
+        error: `Too many emails (max ${MAX_SUBSCRIBER_IMPORT} per import)`,
+      });
+    }
+
+    let added = 0;
+    let reactivated = 0;
+    let skipped = 0;
+    for (const address of emails) {
+      const { rows } = await query(
+        'SELECT * FROM newsletter_subscriptions WHERE email = $1 AND topic = $2',
+        [address, topic],
+      );
+      const existing = rows[0];
+      if (existing) {
+        if (existing.active) {
+          skipped += 1;
+          continue;
+        }
+        await query(
+          'UPDATE newsletter_subscriptions SET active = TRUE, "subscribedAt" = NOW(), source = $2 WHERE id = $1',
+          [existing.id, 'admin-import'],
+        );
+        reactivated += 1;
+        continue;
+      }
+      await query(
+        'INSERT INTO newsletter_subscriptions (email, topic, "unsubscribeToken", source) VALUES ($1, $2, $3, $4)',
+        [address, topic, email.generateToken(), 'admin-import'],
+      );
+      added += 1;
+    }
+
+    res.json({
+      ok: true,
+      topic,
+      added,
+      reactivated,
+      skipped,
+      invalid: invalid.length,
+      total: emails.length,
+    });
+  } catch (err) {
+    console.error('[newsletter] import failed:', err);
+    res.status(500).json({ error: 'Import failed' });
+  }
 });
 
 app.delete('/api/admin/subscribers/:id', requireAuth, async (req, res) => {
