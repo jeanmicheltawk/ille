@@ -1,11 +1,15 @@
-import { Component, OnDestroy } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive, NavigationEnd } from '@angular/router';
+import { CommonModule } from '@angular/common';
+import { Subscription } from 'rxjs';
 import { filter } from 'rxjs/operators';
+import { CustomFormsService } from '../core/custom-forms.service';
+import { CustomFormNav } from '../core/models.types';
 
 @Component({
   selector: 'app-header',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive],
+  imports: [CommonModule, RouterLink, RouterLinkActive],
   template: `
     <header class="hdr" [class.hdr--overlay]="isOverlay" [class.is-open]="open" [class.is-scrolled]="scrolled">
       <!-- Blur lives here so it does not become a containing block for the fixed mobile nav -->
@@ -25,6 +29,7 @@ import { filter } from 'rxjs/operators';
           <a routerLink="/services" routerLinkActive="active" (click)="close()">Services</a>
           <a routerLink="/become-a-model" routerLinkActive="active" (click)="close()">Become a Model</a>
           <a routerLink="/book" routerLinkActive="active" (click)="close()">Book</a>
+          <a *ngFor="let form of menuForms" [routerLink]="'/forms/' + form.id" routerLinkActive="active" (click)="close()">{{ form.title }}</a>
         </nav>
 
         <button
@@ -205,16 +210,18 @@ import { filter } from 'rxjs/operators';
     }
   `],
 })
-export class HeaderComponent implements OnDestroy {
+export class HeaderComponent implements OnInit, OnDestroy {
   open = false;
   scrolled = false;
   isOverlay = false;
+  menuForms: CustomFormNav[] = [];
 
+  private menuSub?: Subscription;
   private onScroll = () => {
     this.scrolled = window.scrollY > 20;
   };
 
-  constructor(private router: Router) {
+  constructor(private router: Router, private customForms: CustomFormsService) {
     const update = (url: string) => {
       this.isOverlay = url === '/' || url === '' || /^\/services\/[^/]+\/book/.test(url);
       this.close();
@@ -229,7 +236,14 @@ export class HeaderComponent implements OnDestroy {
     }
   }
 
+  ngOnInit() {
+    this.menuSub = this.customForms.menuItems$.subscribe((items) => {
+      this.menuForms = items;
+    });
+  }
+
   ngOnDestroy() {
+    this.menuSub?.unsubscribe();
     if (typeof window !== 'undefined') {
       window.removeEventListener('scroll', this.onScroll);
       document.body.style.overflow = '';

@@ -131,10 +131,36 @@ export interface ServiceFormField {
 export type SiteFormId = 'become-a-model' | 'book-a-model';
 
 export interface SiteFormConfig {
-  id: SiteFormId;
+  id: string;
   rules: string[];
   submitLabel: string;
   formFields: ServiceFormField[];
+}
+
+/** Admin-created public form page (own URL, optional menu item). */
+export interface CustomForm {
+  id: string;
+  title: string;
+  showInMenu: boolean;
+  published: boolean;
+  sortOrder: number;
+  rules: string[];
+  submitLabel: string;
+  formFields: ServiceFormField[];
+}
+
+export interface CustomFormNav {
+  id: string;
+  title: string;
+  showInMenu: boolean;
+}
+
+export interface CustomFormSubmission {
+  id?: number;
+  formId: string;
+  formTitle: string;
+  data: Record<string, string>;
+  createdAt?: string;
 }
 
 export interface ServiceItem {

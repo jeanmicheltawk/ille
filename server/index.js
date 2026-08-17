@@ -17,6 +17,7 @@ const {
   categoryFromRow,
   subscriberFromRow,
   siteFormFromRow,
+  customFormFromRow,
   applicationFromRow,
   bookingFromRow,
 } = require('./db');
@@ -794,6 +795,189 @@ app.delete('/api/admin/services/:id', requireAuth, async (req, res) => {
 
 app.get('/api/admin/service-submissions', requireAuth, async (req, res) => {
   const { rows } = await query('SELECT * FROM service_submissions ORDER BY "createdAt" DESC');
+  res.json(rows.map(submissionFromRow));
+});
+
+// ============================================================
+// CUSTOM FORMS — public pages + admin CRUD + submissions
+// ============================================================
+function normalizeFormSlug(raw) {
+  return String(raw || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '')
+    .slice(0, 64);
+}
+
+function serializeCustomForm(body, fallbackId) {
+  const id = normalizeFormSlug(body?.id || fallbackId);
+  const title = (body?.title || '').toString().trim();
+  const rules = Array.isArray(body?.rules) ? body.rules : [];
+  const formFields = Array.isArray(body?.formFields) ? body.formFields : [];
+  const submitLabel = (body?.submitLabel || 'Submit').toString().trim() || 'Submit';
+  return {
+    id,
+    title,
+    showInMenu: !!body?.showInMenu,
+    published: body?.published !== false,
+    sortOrder: Number.isFinite(Number(body?.sortOrder)) ? Number(body.sortOrder) : 0,
+    rules: jsonb(rules, []),
+    formFields: jsonb(formFields, []),
+    submitLabel,
+  };
+}
+
+app.get('/api/custom-forms', async (_req, res) => {
+  const { rows } = await query(
+    `SELECT id, title, "showInMenu", "sortOrder"
+     FROM custom_forms
+     WHERE published = TRUE
+     ORDER BY "sortOrder" ASC, title ASC`,
+  );
+  res.json(rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    showInMenu: !!row.showInMenu,
+    sortOrder: row.sortOrder ?? 0,
+  })));
+});
+
+app.get('/api/custom-forms/:id', async (req, res) => {
+  const { rows } = await query(
+    'SELECT * FROM custom_forms WHERE id = $1 AND published = TRUE',
+    [req.params.id],
+  );
+  const form = customFormFromRow(rows[0]);
+  if (!form) return res.status(404).json({ error: 'Form not found' });
+  res.json(form);
+});
+
+const customFormUpload = upload.any();
+
+app.post('/api/custom-forms/:id/submit', customFormUpload, async (req, res) => {
+  try {
+    const { rows } = await query(
+      'SELECT * FROM custom_forms WHERE id = $1 AND published = TRUE',
+      [req.params.id],
+    );
+    const form = customFormFromRow(rows[0]);
+    if (!form) return res.status(404).json({ error: 'Form not found' });
+
+    const b = req.body || {};
+    const files = Array.isArray(req.files) ? req.files : [];
+    const data = { ...b };
+    for (const file of files) {
+      if (file?.fieldname) {
+        data[file.fieldname] = await storeFile(query, file);
+      }
+    }
+
+    await query(
+      `INSERT INTO custom_form_submissions ("formId", "formTitle", data)
+       VALUES ($1, $2, $3)`,
+      [form.id, form.title, jsonb(data, {})],
+    );
+    res.json({ ok: true });
+
+    email.sendCustomFormNotification(form, data).catch((err) =>
+      console.error('[email] custom form notification failed:', err),
+    );
+    const userEmail = email.extractEmail(data);
+    if (userEmail) {
+      const name =
+        data.name ||
+        data.fullName ||
+        data.clientName ||
+        [data.firstName, data.lastName].filter(Boolean).join(' ') ||
+        '';
+      email.sendFormConfirmation(userEmail, {
+        kind: 'form',
+        title: form.title || 'form',
+        name,
+      }).catch((err) => console.error('[email] custom form confirmation failed:', err));
+    }
+  } catch (err) {
+    console.error('Custom form submit failed:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Could not submit form. Please try again.' });
+    }
+  }
+});
+
+app.get('/api/admin/custom-forms', requireAuth, async (_req, res) => {
+  const { rows } = await query(
+    'SELECT * FROM custom_forms ORDER BY "sortOrder" ASC, title ASC',
+  );
+  res.json(rows.map(customFormFromRow));
+});
+
+app.post('/api/admin/custom-forms', requireAuth, async (req, res) => {
+  const s = serializeCustomForm(req.body);
+  if (!s.id || s.id.length < 2) {
+    return res.status(400).json({ error: 'Please choose a URL of at least 2 characters.' });
+  }
+  if (!s.title) {
+    return res.status(400).json({ error: 'Title is required.' });
+  }
+  try {
+    await query(
+      `INSERT INTO custom_forms (id, title, "showInMenu", published, "sortOrder",
+        rules, "formFields", "submitLabel")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [s.id, s.title, s.showInMenu, s.published, s.sortOrder, s.rules, s.formFields, s.submitLabel],
+    );
+  } catch (err) {
+    if (err?.code === '23505') {
+      return res.status(409).json({ error: 'That URL is already used by another form.' });
+    }
+    throw err;
+  }
+  res.json({ ok: true, id: s.id });
+});
+
+app.put('/api/admin/custom-forms/:id', requireAuth, async (req, res) => {
+  const oldId = req.params.id;
+  const s = serializeCustomForm(req.body, oldId);
+  if (!s.id || s.id.length < 2) {
+    return res.status(400).json({ error: 'Please choose a URL of at least 2 characters.' });
+  }
+  if (!s.title) {
+    return res.status(400).json({ error: 'Title is required.' });
+  }
+  const { rows: existing } = await query('SELECT id FROM custom_forms WHERE id = $1', [oldId]);
+  if (!existing[0]) return res.status(404).json({ error: 'Form not found' });
+  try {
+    await query(
+      `UPDATE custom_forms SET id=$1, title=$2, "showInMenu"=$3, published=$4,
+        "sortOrder"=$5, rules=$6, "formFields"=$7, "submitLabel"=$8, "updatedAt"=NOW()
+       WHERE id=$9`,
+      [s.id, s.title, s.showInMenu, s.published, s.sortOrder, s.rules, s.formFields, s.submitLabel, oldId],
+    );
+  } catch (err) {
+    if (err?.code === '23505') {
+      return res.status(409).json({ error: 'That URL is already used by another form.' });
+    }
+    throw err;
+  }
+  res.json({ ok: true, id: s.id });
+});
+
+app.delete('/api/admin/custom-forms/:id', requireAuth, async (req, res) => {
+  await query('DELETE FROM custom_forms WHERE id = $1', [req.params.id]);
+  res.json({ ok: true });
+});
+
+app.get('/api/admin/custom-form-submissions', requireAuth, async (req, res) => {
+  const formId = (req.query?.formId || '').toString().trim();
+  const params = [];
+  let sql = 'SELECT * FROM custom_form_submissions';
+  if (formId) {
+    params.push(formId);
+    sql += ' WHERE "formId" = $1';
+  }
+  sql += ' ORDER BY "createdAt" DESC';
+  const { rows } = await query(sql, params);
   res.json(rows.map(submissionFromRow));
 });
 

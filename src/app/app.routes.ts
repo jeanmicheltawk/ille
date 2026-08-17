@@ -51,6 +51,13 @@ export const routes: Routes = [
       import('./pages/services/service-book.component').then((m) => m.ServiceBookComponent),
   },
   {
+    path: 'forms/:slug',
+    loadComponent: () =>
+      import('./pages/custom-form/custom-form.component').then((m) => m.CustomFormPageComponent),
+    title: 'ille',
+  },
+  { path: 'forms', redirectTo: '/' },
+  {
     path: 'newsletter/unsubscribe',
     loadComponent: () =>
       import('./pages/newsletter-unsubscribe/newsletter-unsubscribe.component').then(
