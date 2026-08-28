@@ -161,6 +161,21 @@ function siteFormFromRow(row) {
   };
 }
 
+function customFormFromRow(row) {
+  if (!row) return null;
+  const parsedFields = parseJson(row.formFields, []);
+  return {
+    id: row.id,
+    title: row.title,
+    showInMenu: !!row.showInMenu,
+    published: !!row.published,
+    sortOrder: row.sortOrder ?? 0,
+    rules: parseJson(row.rules, []),
+    submitLabel: row.submitLabel || 'Submit',
+    formFields: Array.isArray(parsedFields) ? parsedFields : [],
+  };
+}
+
 function applicationFromRow(row, extraData) {
   if (!row) return null;
   const data = parseJson(extraData, {});
@@ -444,6 +459,7 @@ module.exports = {
   categoryFromRow,
   subscriberFromRow,
   siteFormFromRow,
+  customFormFromRow,
   applicationFromRow,
   bookingFromRow,
   ADMIN_EMAIL,

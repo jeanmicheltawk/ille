@@ -100,6 +100,18 @@ export function serviceSubmissionToRecord(
   };
 }
 
+export function customFormSubmissionToRecord(
+  sub: { formTitle: string; createdAt?: string; id?: string | number; data?: Record<string, string> },
+  fields?: ServiceFormField[],
+): FormRecord {
+  return {
+    title: sub.formTitle,
+    submittedAt: sub.createdAt,
+    id: sub.id,
+    entries: submissionEntriesFromData(sub.data, fields || []),
+  };
+}
+
 function applicationData(app: ModelApplication): Record<string, string> {
   const data: Record<string, string> = { ...(app.data || {}) };
   if (app.firstName) data.firstName = data.firstName || app.firstName;

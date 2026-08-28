@@ -457,6 +457,26 @@ async function sendApplicationNotification(application) {
   return sendMail({ to, subject, html, text });
 }
 
+async function sendCustomFormNotification(form, data) {
+  const to = INFO_NOTIFY_TO;
+  const title = form.title || 'Form';
+  const subject = `New form submission — ${title}`;
+  const pairs = formatSubmissionPairs(data, form.formFields);
+  const rows = fieldRowsHtml(pairs);
+  const html = wrapHtml(`
+    <p>A new form has been submitted.</p>
+    <p><strong>${textToHtml(String(title))}</strong></p>
+    <table style="border-collapse:collapse;">${rows}</table>
+  `);
+  const text = [
+    'New form submitted.',
+    `Form: ${title}`,
+    '',
+    ...pairs.map(([k, v]) => `${k}: ${v}`),
+  ].join('\n');
+  return sendMail({ to, subject, html, text, account: 'info' });
+}
+
 async function sendServiceSubmissionNotification(service, data) {
   const to = INFO_NOTIFY_TO;
   const title = service.formTitle || service.title || 'Service enquiry';
@@ -482,7 +502,7 @@ async function sendFormConfirmation(toEmail, { kind, title, name } = {}) {
     console.log('[email] skip confirmation — no valid recipient email');
     return { ok: false, skipped: true };
   }
-  const useInfo = kind === 'service';
+  const useInfo = kind === 'service' || kind === 'form';
   const replyAddress = useInfo ? INFO_FROM : FROM;
   const label = title || (
     kind === 'application' ? 'model application'
@@ -558,6 +578,7 @@ module.exports = {
   sendBookingNotification,
   sendApplicationNotification,
   sendServiceSubmissionNotification,
+  sendCustomFormNotification,
   sendFormConfirmation,
   notifySubscribers,
 };

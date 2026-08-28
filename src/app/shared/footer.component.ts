@@ -1,8 +1,11 @@
-import { Component } from '@angular/core';
+import { Component, OnDestroy, OnInit } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
+import { Subscription } from 'rxjs';
 import { NewsletterService } from '../core/newsletter.service';
+import { CustomFormsService } from '../core/custom-forms.service';
+import { CustomFormNav } from '../core/models.types';
 
 @Component({
   selector: 'app-footer',
@@ -40,6 +43,7 @@ import { NewsletterService } from '../core/newsletter.service';
           <a routerLink="/services">Services</a>
           <a routerLink="/become-a-model">Become a Model</a>
           <a routerLink="/book">Book a Model</a>
+          <a *ngFor="let form of menuForms" [routerLink]="'/forms/' + form.id">{{ form.title }}</a>
         </div>
 
         <div class="ftr__col ftr__newsletter">
@@ -389,7 +393,7 @@ import { NewsletterService } from '../core/newsletter.service';
     }
   `],
 })
-export class FooterComponent {
+export class FooterComponent implements OnInit, OnDestroy {
   year = new Date().getFullYear();
   email = '';
   loading = false;
@@ -397,8 +401,20 @@ export class FooterComponent {
   subscribedMessage = '';
   error = '';
   pendingTopic: 'models' | 'community' | null = null;
+  menuForms: CustomFormNav[] = [];
+  private menuSub?: Subscription;
 
-  constructor(private newsletter: NewsletterService) {}
+  constructor(private newsletter: NewsletterService, private customForms: CustomFormsService) {}
+
+  ngOnInit() {
+    this.menuSub = this.customForms.menuItems$.subscribe((items) => {
+      this.menuForms = items;
+    });
+  }
+
+  ngOnDestroy() {
+    this.menuSub?.unsubscribe();
+  }
 
   get bothDone() {
     return this.done.models && this.done.community;

@@ -1,7 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { NewsletterService, SubscriberTopic } from '../../core/newsletter.service';
+import { HttpErrorResponse } from '@angular/common/http';
+import { NewsletterService, SubscriberImportResult, SubscriberTopic } from '../../core/newsletter.service';
 import { EmailSubscriber } from '../../core/models.types';
 
 @Component({
@@ -42,6 +43,38 @@ import { EmailSubscriber } from '../../core/models.types';
         </div>
       </div>
 
+      <div class="broadcast">
+        <p class="section-label">Import emails</p>
+        <p class="muted import-hint">
+          Paste a list (one per line, commas, or a copied spreadsheet column).
+          Existing addresses are skipped. Welcome emails are not sent.
+        </p>
+        <div class="field">
+          <label>List</label>
+          <select [(ngModel)]="importTopic" name="importTopic">
+            <option value="models">Models' Update</option>
+            <option value="community">Join our Community</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Emails</label>
+          <textarea [(ngModel)]="importText" name="importText" rows="8"
+            placeholder="one@email.com&#10;two@email.com"></textarea>
+        </div>
+        <div class="broadcast__actions">
+          <button type="button" class="btn" [disabled]="importing || !importText.trim()" (click)="importEmails()">
+            {{ importing ? 'Importing…' : 'Add to list' }}
+          </button>
+        </div>
+        <div *ngIf="importResult" class="notice notice--ok">
+          Added {{ importResult.added }}
+          <span *ngIf="importResult.reactivated">, reactivated {{ importResult.reactivated }}</span>
+          <span *ngIf="importResult.skipped">, skipped {{ importResult.skipped }} already on the list</span>
+          <span *ngIf="importResult.invalid">, ignored {{ importResult.invalid }} invalid</span>.
+        </div>
+        <div *ngIf="importError" class="notice notice--err">{{ importError }}</div>
+      </div>
+
       <div class="broadcast" *ngIf="subscribers.length">
         <p class="section-label">
           Send message to {{ topicFilter === 'all' ? 'all subscribers' : topicLabel(topicFilter) + ' subscribers' }}
@@ -71,7 +104,7 @@ import { EmailSubscriber } from '../../core/models.types';
       <div *ngIf="listNotice" class="notice notice--ok">{{ listNotice }}</div>
       <div *ngIf="listError" class="notice notice--err">{{ listError }}</div>
 
-      <p class="muted" *ngIf="!subscribers.length">No subscribers yet. Visitors can sign up from the site footer.</p>
+      <p class="muted" *ngIf="!subscribers.length">No subscribers in this list yet. Paste emails above or wait for footer signups.</p>
 
       <table class="tbl" *ngIf="subscribers.length">
         <thead>
@@ -221,6 +254,7 @@ import { EmailSubscriber } from '../../core/models.types';
       color: var(--ink-muted);
       margin-bottom: 6px;
     }
+    .field select,
     .field input, .field textarea {
       width: 100%;
       background: transparent;
@@ -231,7 +265,12 @@ import { EmailSubscriber } from '../../core/models.types';
       font-size: 14px;
       font-weight: 300;
     }
+    .field select {
+      appearance: none;
+      border-radius: 0;
+    }
     .field textarea { resize: vertical; min-height: 120px; }
+    .import-hint { margin: 0 0 16px; max-width: 52ch; }
     code { font-size: 12px; color: var(--ink-soft); }
     @media (max-width: 960px) {
       .sub-admin__head { flex-direction: column; }
@@ -264,6 +303,11 @@ export class AdminSubscribersComponent implements OnInit {
   sendError = '';
   listNotice = '';
   listError = '';
+  importText = '';
+  importTopic: SubscriberTopic = 'models';
+  importing = false;
+  importResult: SubscriberImportResult | null = null;
+  importError = '';
 
   constructor(private newsletter: NewsletterService) {}
 
@@ -287,6 +331,32 @@ export class AdminSubscribersComponent implements OnInit {
     if (this.topicFilter === filter) return;
     this.topicFilter = filter;
     this.applyFilter();
+  }
+
+  async importEmails() {
+    if (!this.importText.trim()) return;
+    const found = this.importText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || [];
+    if (!found.length) {
+      this.importError = 'No valid email addresses found.';
+      return;
+    }
+    if (!confirm(`Add ${found.length} email(s) to ${this.topicLabel(this.importTopic)}? Welcome emails will not be sent.`)) {
+      return;
+    }
+    this.importing = true;
+    this.importError = '';
+    this.importResult = null;
+    this.listNotice = '';
+    this.listError = '';
+    try {
+      this.importResult = await this.newsletter.importSubscribers(this.importText, this.importTopic);
+      this.importText = '';
+      await this.refresh();
+    } catch (err: unknown) {
+      this.importError = this.getErrorMessage(err, 'Failed to import subscribers.');
+    } finally {
+      this.importing = false;
+    }
   }
 
   async remove(s: EmailSubscriber) {
@@ -352,5 +422,18 @@ export class AdminSubscribersComponent implements OnInit {
       return;
     }
     this.subscribers = this.allSubscribers.filter((s) => (s.topic || 'models') === this.topicFilter);
+  }
+
+  private getErrorMessage(err: unknown, fallback: string): string {
+    if (err instanceof HttpErrorResponse) {
+      const payload = err.error;
+      if (typeof payload === 'string' && payload.trim()) return payload.trim();
+      if (payload && typeof payload === 'object') {
+        const msg = (payload as { error?: unknown }).error;
+        if (typeof msg === 'string' && msg.trim()) return msg.trim();
+      }
+    }
+    if (err instanceof Error && err.message.trim()) return err.message.trim();
+    return fallback;
   }
 }

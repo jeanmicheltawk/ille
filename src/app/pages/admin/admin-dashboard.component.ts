@@ -23,6 +23,7 @@ import { AdminServicesComponent } from './admin-services.component';
 import { AdminCategoriesComponent } from './admin-categories.component';
 import { AdminSubscribersComponent } from './admin-subscribers.component';
 import { AdminSiteFormEditorComponent } from './admin-site-form-editor.component';
+import { AdminCustomFormsComponent } from './admin-custom-forms.component';
 import { FileUploadComponent } from '../../shared/file-upload.component';
 import { CategoriesService } from '../../core/categories.service';
 import { SiteFormsService } from '../../core/site-forms.service';
@@ -34,7 +35,7 @@ import { FormEntryValueComponent } from '../../shared/form-entry-value.component
 @Component({
   selector: 'app-admin-dashboard',
   standalone: true,
-  imports: [CommonModule, FormsModule, AdminServicesComponent, AdminCategoriesComponent, AdminSubscribersComponent, AdminSiteFormEditorComponent, FileUploadComponent, FormEntryValueComponent],
+  imports: [CommonModule, FormsModule, AdminServicesComponent, AdminCategoriesComponent, AdminSubscribersComponent, AdminSiteFormEditorComponent, AdminCustomFormsComponent, FileUploadComponent, FormEntryValueComponent],
   template: `
     <div class="container dash">
       <div class="dash__top">
@@ -52,6 +53,7 @@ import { FormEntryValueComponent } from '../../shared/form-entry-value.component
         <button [class.on]="tab==='bookings'" (click)="setTab('bookings')">Bookings ({{ bookings.length }})</button>
         <button [class.on]="tab==='subscribers'" (click)="setTab('subscribers')">Subscribers</button>
         <button [class.on]="tab==='services'" (click)="setTab('services')">Services</button>
+        <button [class.on]="tab==='forms'" (click)="setTab('forms')">Forms</button>
       </nav>
 
       <p class="action-feedback" *ngIf="actionMessage" [class.action-feedback--error]="actionKind === 'error'">
@@ -200,6 +202,11 @@ import { FormEntryValueComponent } from '../../shared/form-entry-value.component
       <!-- SERVICES -->
       <section *ngIf="tab==='services'">
         <app-admin-services />
+      </section>
+
+      <!-- CUSTOM FORMS -->
+      <section *ngIf="tab==='forms'">
+        <app-admin-custom-forms />
       </section>
 
       <!-- SUBSCRIBERS -->
@@ -751,7 +758,7 @@ import { FormEntryValueComponent } from '../../shared/form-entry-value.component
 export class AdminDashboardComponent implements OnInit {
   @ViewChildren('mediaUpload') mediaUploads!: QueryList<FileUploadComponent>;
 
-  tab: 'models' | 'categories' | 'apps' | 'bookings' | 'subscribers' | 'services' = 'models';
+  tab: 'models' | 'categories' | 'apps' | 'bookings' | 'subscribers' | 'services' | 'forms' = 'models';
   appsSubTab: 'list' | 'form' = 'list';
   bookingsSubTab: 'list' | 'form' = 'list';
   models: Model[] = [];

@@ -95,7 +95,7 @@ export class SiteFormsService {
       await this.api.put(`/admin/forms/${prepared.id}`, prepared);
       return;
     }
-    this.mock[prepared.id] = prepared;
+    this.mock[prepared.id as SiteFormId] = prepared;
   }
 
   blankField(sortOrder = 0): ServiceFormField {

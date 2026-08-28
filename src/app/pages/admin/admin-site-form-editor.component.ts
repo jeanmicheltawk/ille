@@ -36,7 +36,7 @@ interface QuickField {
             Tap a field to edit it, or use <strong>Quick add</strong> for common questions.
           </p>
         </div>
-        <div class="editor__actions">
+        <div class="editor__actions" *ngIf="persist">
           <button type="button" class="btn btn--ghost btn--sm" (click)="resetDefaults()" [disabled]="saving">
             Reset to default
           </button>
@@ -46,7 +46,7 @@ interface QuickField {
         </div>
       </div>
 
-      <ol class="howto">
+      <ol class="howto" *ngIf="persist">
         <li>Add or edit questions below</li>
         <li>Click <strong>Save form</strong></li>
         <li>The live website updates immediately</li>
@@ -58,7 +58,8 @@ interface QuickField {
       <div class="field" *ngIf="showRules">
         <label>Intro rules <span class="tip">One rule per line — shown above the form</span></label>
         <textarea [(ngModel)]="rulesText" name="rules" rows="4"
-          placeholder="e.g. Phone pictures are fine; use natural light."></textarea>
+          placeholder="e.g. Phone pictures are fine; use natural light."
+          (ngModelChange)="syncRules()"></textarea>
       </div>
 
       <div class="field">
@@ -141,7 +142,7 @@ interface QuickField {
         </div>
       </div>
 
-      <div class="editor__footer">
+      <div class="editor__footer" *ngIf="persist">
         <button type="button" class="btn" (click)="save()" [disabled]="saving">
           {{ saving ? 'Saving…' : 'Save form' }}
         </button>
@@ -353,10 +354,12 @@ interface QuickField {
   `],
 })
 export class AdminSiteFormEditorComponent implements OnInit {
-  @Input({ required: true }) formId!: SiteFormId;
-  @Input({ required: true }) title!: string;
+  @Input() formId?: SiteFormId;
+  @Input() title = 'Form questions';
   @Input() showRules = false;
   @Input() allowFile = false;
+  /** When set, the editor mutates this object in place and does not persist on its own. */
+  @Input() boundConfig: Pick<SiteFormConfig, 'rules' | 'submitLabel' | 'formFields'> | null = null;
   @Output() saved = new EventEmitter<SiteFormConfig>();
 
   config: SiteFormConfig = { id: 'become-a-model', rules: [], submitLabel: 'Submit', formFields: [] };
@@ -388,6 +391,10 @@ export class AdminSiteFormEditorComponent implements OnInit {
 
   private toast = inject(ToastService);
 
+  get persist(): boolean {
+    return !this.boundConfig;
+  }
+
   async ngOnInit() {
     this.quickFields = this.allowFile
       ? [
@@ -415,7 +422,25 @@ export class AdminSiteFormEditorComponent implements OnInit {
           { type: 'text', label: 'Dates', placeholder: 'e.g. 12–14 July' },
           { type: 'textarea', label: 'Details' },
         ];
+    if (this.boundConfig) {
+      this.config = this.boundConfig as SiteFormConfig;
+      this.rulesText = (this.config.rules || []).join('\n');
+      return;
+    }
     await this.load();
+  }
+
+  /** Copy intro rules back onto the bound config before the parent saves. */
+  flushToBound() {
+    if (!this.boundConfig) return;
+    this.syncRules();
+    this.boundConfig.submitLabel = this.config.submitLabel;
+    this.boundConfig.formFields = this.fields;
+  }
+
+  syncRules() {
+    if (!this.boundConfig) return;
+    this.boundConfig.rules = this.rulesText.split('\n').map((line) => line.trim()).filter(Boolean);
   }
 
   get fields(): ServiceFormField[] {
@@ -428,6 +453,7 @@ export class AdminSiteFormEditorComponent implements OnInit {
   }
 
   async load() {
+    if (!this.formId) return;
     this.config = await this.forms.get(this.formId);
     this.rulesText = (this.config.rules || []).join('\n');
   }
@@ -522,6 +548,12 @@ export class AdminSiteFormEditorComponent implements OnInit {
   }
 
   async save() {
+    if (this.boundConfig) {
+      this.flushToBound();
+      this.saved.emit(this.config);
+      return;
+    }
+    if (!this.formId) return;
     this.saving = true;
     this.message = '';
     this.error = '';
@@ -541,6 +573,7 @@ export class AdminSiteFormEditorComponent implements OnInit {
   }
 
   resetDefaults() {
+    if (!this.formId) return;
     if (!confirm('Reset this form to the original default questions? Your custom changes will be lost.')) return;
     this.config = this.forms.default(this.formId);
     this.rulesText = (this.config.rules || []).join('\n');
