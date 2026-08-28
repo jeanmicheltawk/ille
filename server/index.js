@@ -112,10 +112,8 @@ function notifyNewModel(model) {
     return;
   }
 
-  // One email per address. Dual-list subscribers must not get two copies.
-  activeSubscribers(null)
-    .then((all) => {
-      const subs = uniqueSubscribersByEmail(all, 'models');
+  activeSubscribers('models')
+    .then((subs) => {
       if (!subs.length) {
         return null;
       }
