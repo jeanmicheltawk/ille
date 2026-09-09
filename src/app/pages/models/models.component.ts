@@ -32,9 +32,9 @@ import {
         </ng-container>
       </div>
       <label class="oot">
-        <input type="checkbox" [checked]="onlyOutOfTown" (change)="toggleOutOfTown()" />
+        <input type="checkbox" [checked]="onlyInTown" (change)="toggleInTown()" />
         <span class="oot__box"></span>
-        Out of town only
+        In town only
       </label>
     </div>
 
@@ -256,7 +256,7 @@ export class ModelsComponent implements OnInit {
   categories: ModelCategory[] = [];
   branch: ModelsBranch | null = null;
   subCategory = '';
-  onlyOutOfTown = false;
+  onlyInTown = false;
   loading = true;
   private categoriesWithModels = new Set<string>();
 
@@ -348,13 +348,13 @@ export class ModelsComponent implements OnInit {
     this.loading = false;
   }
 
-  toggleOutOfTown() {
-    this.onlyOutOfTown = !this.onlyOutOfTown;
+  toggleInTown() {
+    this.onlyInTown = !this.onlyInTown;
     this.applyFilter();
   }
 
   private applyFilter() {
-    this.visible = this.onlyOutOfTown ? this.all.filter((m) => m.outOfTown) : this.all;
+    this.visible = this.onlyInTown ? this.all.filter((m) => !m.outOfTown) : this.all;
   }
 
   cardStatGroups(m: Model): { label: string | null; stats: ModelStat[] }[] {
