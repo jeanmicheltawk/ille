@@ -371,7 +371,9 @@ app.post('/api/admin/models', requireAuth, async (req, res) => {
     ]);
     await saveModelExtras({ ...m, id: s.id });
     res.json({ ok: true });
-    notifyNewModel({ ...m, id: s.id, name: s.name, published: s.published });
+    if (m.notifySubscribers !== false) {
+      notifyNewModel({ ...m, id: s.id, name: s.name, published: s.published });
+    }
   } catch (err) {
     console.error('POST /api/admin/models failed:', err);
     res.status(500).json({ error: err.message || 'Failed to save model' });

@@ -406,6 +406,10 @@ import { FormEntryValueComponent } from '../../shared/form-entry-value.component
           <div class="checks">
             <label><input type="checkbox" name="oot" [(ngModel)]="editing.outOfTown" /> Out of town</label>
             <label><input type="checkbox" name="pub" [(ngModel)]="editing.published" /> Published (visible on site)</label>
+            <label *ngIf="!editing.id">
+              <input type="checkbox" name="notifySubscribers" [(ngModel)]="notifySubscribers" />
+              Notify subscribers
+            </label>
           </div>
 
           <p class="form-error form-error--actions" *ngIf="formError">{{ formError }}</p>
@@ -575,7 +579,7 @@ import { FormEntryValueComponent } from '../../shared/form-entry-value.component
     .field-hint strong { color: var(--ink-soft); font-weight: 300; }
     .cover-field { margin-top: 20px; }
     .checks {
-      display: flex; gap: 32px;
+      display: flex; flex-wrap: wrap; gap: 32px;
       margin: 24px 0;
       font-size: 13px;
       font-weight: 200;
@@ -768,6 +772,7 @@ export class AdminDashboardComponent implements OnInit {
   applicationForm: SiteFormConfig | null = null;
   bookingForm: SiteFormConfig | null = null;
   editing: Model = this.blank();
+  notifySubscribers = true;
   configured = false;
   viewingForm: FormRecord | null = null;
   modelModalOpen = false;
@@ -861,6 +866,7 @@ export class AdminDashboardComponent implements OnInit {
 
   resetEditor() {
     this.editing = this.blank();
+    this.notifySubscribers = true;
   }
 
   private clearFormErrors() {
@@ -953,7 +959,7 @@ export class AdminDashboardComponent implements OnInit {
       } else {
         this.editing.id = this.categoriesSvc.slugFromName(this.editing.name);
         if (!this.editing.gallery?.length) this.editing.gallery = [];
-        await this.modelsSvc.create(this.editing);
+        await this.modelsSvc.create(this.editing, { notifySubscribers: this.notifySubscribers });
       }
       this.closeModelModal();
       await this.refresh();

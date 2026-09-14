@@ -60,8 +60,14 @@ export class ModelsService {
     return [...this.mock].sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  async create(model: Model): Promise<void> {
-    if (this.api.useApi) { await this.api.post('/admin/models', model); return; }
+  async create(model: Model, options?: { notifySubscribers?: boolean }): Promise<void> {
+    if (this.api.useApi) {
+      await this.api.post('/admin/models', {
+        ...model,
+        notifySubscribers: options?.notifySubscribers !== false,
+      });
+      return;
+    }
     this.mock = [...this.mock, model];
   }
 
