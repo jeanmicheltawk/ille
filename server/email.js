@@ -7,7 +7,8 @@ const fs = require('fs');
 const path = require('path');
 
 const FROM = process.env.NEWSLETTER_FROM || 'bookings@ille.co';
-const NOTIFY_TO = process.env.BOOKINGS_NOTIFY_EMAIL || 'bookings@ille.co';
+// Admin copies for /book and /become-a-model only. Service and custom forms use INFO_NOTIFY_TO.
+const SITE_FORM_NOTIFY_TO = process.env.SITE_FORM_NOTIFY_EMAIL || 'illechan@outlook.com';
 const INFO_FROM = process.env.INFO_FROM || 'info@ille.co';
 const INFO_NOTIFY_TO = process.env.INFO_NOTIFY_EMAIL || 'info@ille.co';
 const SITE_URL = (process.env.SITE_URL || 'https://ille.co').replace(/\/$/, '');
@@ -321,25 +322,43 @@ async function sendWelcome(email, token, topic = 'models') {
 }
 
 async function sendNewModelNotice(email, token, model) {
+  const name = String(model.name || '').trim();
+  const safeName = textToHtml(name);
   const profileUrl = `${SITE_URL}/model/${encodeURIComponent(model.id)}`;
-  const subject = `New model — ${model.name}`;
+  const bookingsEmail = 'bookings@ille.co';
+  const phoneDisplay = '+961 81 177 655';
+  const subject = `New model on board — ${name}`;
   const html = wrapHtml(`
-    <p style="margin:0 0 18px 0;font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.35;color:#1a1a1a;">
-      A new face joins ille
+    <p style="margin:0 0 18px 0;font-family:Georgia,'Times New Roman',serif;font-size:22px;line-height:1.35;color:#1a1a1a;letter-spacing:0.06em;">
+      NEW MODEL ON BOARD
     </p>
-    <p style="margin:0 0 14px 0;">We've just added a new model to our roster:</p>
-    <p style="margin:0 0 14px 0;"><strong>${textToHtml(String(model.name || ''))}</strong></p>
-    <p style="margin:0 0 14px 0;"><a href="${profileUrl}" style="color:#1a1a1a;">View profile →</a></p>
-    <p style="margin:28px 0 0 0;">Warmly,<br><span style="letter-spacing:0.04em;">ille</span></p>
+    <p style="margin:0 0 14px 0;">We are pleased to introduce <strong>${safeName}</strong>,</p>
+    <p style="margin:0 0 14px 0;">Discover her profile and explore her portfolio:</p>
+    <p style="margin:0 0 6px 0;"><a href="${profileUrl}" style="color:#1a1a1a;font-weight:bold;text-decoration:none;">View ${safeName}'s profile →</a></p>
+    <p style="margin:0 0 14px 0;"><a href="${profileUrl}" style="color:#1a1a1a;">${textToHtml(profileUrl)}</a></p>
+    <p style="margin:0 0 6px 0;">For bookings and inquiries:</p>
+    <p style="margin:0 0 4px 0;"><a href="mailto:${bookingsEmail}" style="color:#1a1a1a;font-weight:bold;text-decoration:none;">${bookingsEmail}</a></p>
+    <p style="margin:0 0 14px 0;"><a href="tel:+96181177655" style="color:#1a1a1a;font-weight:bold;text-decoration:none;">${phoneDisplay}</a></p>
+    <p style="margin:28px 0 0 0;">Warmly,<br>Let us make a statement out of every beauty</p>
+    <p style="margin:18px 0 0 0;letter-spacing:0.04em;">ille</p>
   `, token);
   const text = [
-    'A new face joins ille',
+    'NEW MODEL ON BOARD',
     '',
-    `We've just added a new model to our roster: ${model.name}`,
+    `We are pleased to introduce ${name},`,
     '',
-    `View profile: ${profileUrl}`,
+    'Discover her profile and explore her portfolio:',
+    '',
+    `View ${name}'s profile →`,
+    profileUrl,
+    '',
+    'For bookings and inquiries:',
+    bookingsEmail,
+    phoneDisplay,
     '',
     'Warmly,',
+    'Let us make a statement out of every beauty',
+    '',
     'ille',
   ].join('\n');
   // New-model notices go out from info@ille.co
@@ -412,7 +431,7 @@ function formatSubmissionPairs(data, formFields) {
 }
 
 async function sendBookingNotification(booking, formFields) {
-  const to = NOTIFY_TO;
+  const to = SITE_FORM_NOTIFY_TO;
   const name = booking.clientName || booking.company || booking.email || 'Unknown';
   const subject = `New booking enquiry — ${name}`;
   const pairs = formatSubmissionPairs(booking, formFields);
@@ -430,7 +449,7 @@ async function sendBookingNotification(booking, formFields) {
 }
 
 async function sendApplicationNotification(application) {
-  const to = NOTIFY_TO;
+  const to = SITE_FORM_NOTIFY_TO;
   const name = [application.firstName, application.lastName].filter(Boolean).join(' ') || 'Unknown';
   const subject = `New model application — ${name}`;
   const rows = fieldRowsHtml([
