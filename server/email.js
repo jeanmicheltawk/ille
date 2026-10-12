@@ -7,8 +7,16 @@ const fs = require('fs');
 const path = require('path');
 
 const FROM = process.env.NEWSLETTER_FROM || 'bookings@ille.co';
-// Admin copies for /book and /become-a-model only. Service and custom forms use INFO_NOTIFY_TO.
-const SITE_FORM_NOTIFY_TO = process.env.SITE_FORM_NOTIFY_EMAIL || 'illechan@outlook.com';
+// Inbox that receives each public form (not the confirmation sent back to the visitor).
+// Book a model → bookings@ille.co
+// Become a model → illechan@outlook.com
+// Book a service → illechan@outlook.com
+// Custom forms still use INFO_NOTIFY_TO.
+const BOOKING_NOTIFY_TO = process.env.BOOKING_NOTIFY_EMAIL || 'bookings@ille.co';
+const APPLICATION_NOTIFY_TO = process.env.APPLICATION_NOTIFY_EMAIL
+  || process.env.SITE_FORM_NOTIFY_EMAIL
+  || 'illechan@outlook.com';
+const SERVICE_NOTIFY_TO = process.env.SERVICE_NOTIFY_EMAIL || 'illechan@outlook.com';
 const INFO_FROM = process.env.INFO_FROM || 'info@ille.co';
 const INFO_NOTIFY_TO = process.env.INFO_NOTIFY_EMAIL || 'info@ille.co';
 const SITE_URL = (process.env.SITE_URL || 'https://ille.co').replace(/\/$/, '');
@@ -431,7 +439,7 @@ function formatSubmissionPairs(data, formFields) {
 }
 
 async function sendBookingNotification(booking, formFields) {
-  const to = SITE_FORM_NOTIFY_TO;
+  const to = BOOKING_NOTIFY_TO;
   const name = booking.clientName || booking.company || booking.email || 'Unknown';
   const subject = `New booking enquiry — ${name}`;
   const pairs = formatSubmissionPairs(booking, formFields);
@@ -449,7 +457,7 @@ async function sendBookingNotification(booking, formFields) {
 }
 
 async function sendApplicationNotification(application) {
-  const to = SITE_FORM_NOTIFY_TO;
+  const to = APPLICATION_NOTIFY_TO;
   const name = [application.firstName, application.lastName].filter(Boolean).join(' ') || 'Unknown';
   const subject = `New model application — ${name}`;
   const rows = fieldRowsHtml([
@@ -497,7 +505,7 @@ async function sendCustomFormNotification(form, data) {
 }
 
 async function sendServiceSubmissionNotification(service, data) {
-  const to = INFO_NOTIFY_TO;
+  const to = SERVICE_NOTIFY_TO;
   const title = service.formTitle || service.title || 'Service enquiry';
   const subject = `New service enquiry — ${title}`;
   const pairs = formatSubmissionPairs(data, service.formFields);
