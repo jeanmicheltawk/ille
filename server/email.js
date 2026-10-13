@@ -9,16 +9,15 @@ const path = require('path');
 const FROM = process.env.NEWSLETTER_FROM || 'bookings@ille.co';
 // Inbox that receives each public form (not the confirmation sent back to the visitor).
 // Book a model → bookings@ille.co
+// Book a service → info@ille.co
 // Become a model → illechan@outlook.com
-// Book a service → illechan@outlook.com
-// Custom forms still use INFO_NOTIFY_TO.
 const BOOKING_NOTIFY_TO = process.env.BOOKING_NOTIFY_EMAIL || 'bookings@ille.co';
 const APPLICATION_NOTIFY_TO = process.env.APPLICATION_NOTIFY_EMAIL
   || process.env.SITE_FORM_NOTIFY_EMAIL
   || 'illechan@outlook.com';
-const SERVICE_NOTIFY_TO = process.env.SERVICE_NOTIFY_EMAIL || 'illechan@outlook.com';
 const INFO_FROM = process.env.INFO_FROM || 'info@ille.co';
 const INFO_NOTIFY_TO = process.env.INFO_NOTIFY_EMAIL || 'info@ille.co';
+const SERVICE_NOTIFY_TO = process.env.SERVICE_NOTIFY_EMAIL || INFO_NOTIFY_TO;
 const SITE_URL = (process.env.SITE_URL || 'https://ille.co').replace(/\/$/, '');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const LOGO_CID = 'ille-logo@ille';
