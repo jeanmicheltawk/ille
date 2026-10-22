@@ -22,16 +22,29 @@ export type FileUploadAccept = 'image' | 'pdf' | 'video';
   }],
   template: `
     <div class="file-upload" [class.file-upload--multi]="multiple">
+      <p class="file-upload__reorder-hint" *ngIf="canReorder">{{ reorderHint }}</p>
       <div class="file-upload__previews" *ngIf="previewItems.length">
         <figure
           class="file-upload__item"
           [class.file-upload__item--doc]="accept !== 'image'"
+          [class.file-upload__item--dragging]="dragIndex === i"
+          [class.file-upload__item--over]="overIndex === i && dragIndex !== i"
           *ngFor="let item of previewItems; let i = index"
+          [attr.draggable]="canReorder ? true : null"
+          (dragstart)="onDragStart(i, $event)"
+          (dragover)="onDragOver(i, $event)"
+          (drop)="onDrop(i, $event)"
+          (dragend)="onDragEnd()"
         >
-          <img *ngIf="accept === 'image'" [src]="item.url" alt="" />
+          <span class="file-upload__index" *ngIf="canReorder">{{ i + 1 }}</span>
+          <img *ngIf="accept === 'image'" [src]="item.url" alt="" draggable="false" />
           <span *ngIf="accept === 'pdf' || accept === 'video'" class="file-upload__doc" [title]="item.name">
             {{ item.name }}
           </span>
+          <div class="file-upload__moves" *ngIf="canReorder">
+            <button type="button" (click)="move(i, -1)" [disabled]="i === 0" aria-label="Move earlier">‹</button>
+            <button type="button" (click)="move(i, 1)" [disabled]="i === previewItems.length - 1" aria-label="Move later">›</button>
+          </div>
           <button type="button" class="file-upload__remove" (click)="remove(i)" aria-label="Remove">×</button>
         </figure>
       </div>
@@ -72,9 +85,47 @@ export type FileUploadAccept = 'image' | 'pdf' | 'video';
       position: relative;
       margin: 0;
       width: 88px;
-      height: 110px;
       border: 1px solid var(--line);
       overflow: hidden;
+    }
+    .file-upload__item[draggable='true'] { cursor: grab; }
+    .file-upload__item--dragging { opacity: 0.4; }
+    .file-upload__item--over { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .file-upload__index {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      min-width: 18px;
+      height: 18px;
+      padding: 0 4px;
+      background: rgba(0, 0, 0, 0.55);
+      color: #fff;
+      font-size: 10px;
+      line-height: 18px;
+      text-align: center;
+    }
+    .file-upload__moves { display: flex; }
+    .file-upload__moves button {
+      flex: 1;
+      height: 26px;
+      border: 0;
+      border-top: 1px solid var(--line);
+      background: transparent;
+      color: var(--ink-soft);
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0;
+    }
+    .file-upload__moves button + button { border-left: 1px solid var(--line); }
+    .file-upload__moves button:disabled { opacity: 0.3; cursor: default; }
+    .file-upload__moves button:not(:disabled):hover { color: var(--ink); }
+    .file-upload__reorder-hint {
+      margin: 0;
+      font-size: 11px;
+      color: var(--ink-muted);
+      font-weight: 200;
+      letter-spacing: 0.04em;
     }
     .file-upload__item--doc {
       width: auto;
@@ -85,7 +136,7 @@ export type FileUploadAccept = 'image' | 'pdf' | 'video';
     }
     .file-upload__item img {
       width: 100%;
-      height: 100%;
+      height: 110px;
       object-fit: cover;
       display: block;
     }
@@ -193,7 +244,8 @@ export type FileUploadAccept = 'image' | 'pdf' | 'video';
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .file-upload--multi .file-upload__item { width: 72px; height: 90px; }
+    .file-upload--multi .file-upload__item { width: 96px; }
+    .file-upload--multi .file-upload__item img { height: 120px; }
   `],
 })
 export class FileUploadComponent implements ControlValueAccessor {
@@ -201,12 +253,15 @@ export class FileUploadComponent implements ControlValueAccessor {
   @Input() multiple = false;
   @Input() label = 'Upload from device';
   @Input() hint = 'Choose a file from your computer or phone';
+  @Input() reorderHint = 'Drag to change the order shown on the site, or use the arrows.';
 
   uploading = false;
   error = '';
   uploadedCount = 0;
   totalCount = 0;
   currentFileName = '';
+  dragIndex: number | null = null;
+  overIndex: number | null = null;
   private value: string | string[] = '';
   private labels = new Map<string, string>();
   private onChange: (v: string | string[]) => void = () => {};
@@ -228,6 +283,10 @@ export class FileUploadComponent implements ControlValueAccessor {
   get previewUrls(): string[] {
     if (this.multiple) return Array.isArray(this.value) ? this.value : [];
     return typeof this.value === 'string' && this.value ? [this.value] : [];
+  }
+
+  get canReorder(): boolean {
+    return this.multiple && this.accept === 'image' && this.previewUrls.length > 1;
   }
 
   get previewItems(): { url: string; name: string }[] {
@@ -314,6 +373,52 @@ export class FileUploadComponent implements ControlValueAccessor {
   /** Clear a previous upload error so save can proceed after the user fixes/removes files. */
   clearError() {
     this.error = '';
+  }
+
+  onDragStart(index: number, event: DragEvent) {
+    const target = event.target as HTMLElement | null;
+    if (!this.canReorder || target?.closest('button')) {
+      event.preventDefault();
+      return;
+    }
+    this.dragIndex = index;
+    event.dataTransfer?.setData('text/plain', String(index));
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+  }
+
+  onDragOver(index: number, event: DragEvent) {
+    if (!this.canReorder || this.dragIndex === null) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    this.overIndex = index;
+  }
+
+  onDrop(index: number, event: DragEvent) {
+    event.preventDefault();
+    const from = this.dragIndex;
+    this.dragIndex = null;
+    this.overIndex = null;
+    if (from === null || from === index) return;
+    this.moveTo(from, index);
+  }
+
+  onDragEnd() {
+    this.dragIndex = null;
+    this.overIndex = null;
+  }
+
+  move(index: number, delta: number) {
+    this.moveTo(index, index + delta);
+  }
+
+  private moveTo(from: number, to: number) {
+    const current = Array.isArray(this.value) ? [...this.value] : [];
+    if (from < 0 || to < 0 || from >= current.length || to >= current.length || from === to) return;
+    const [item] = current.splice(from, 1);
+    current.splice(to, 0, item);
+    this.value = current;
+    this.onChange(this.value);
+    this.onTouched();
   }
 
   remove(index: number) {

@@ -335,7 +335,7 @@ import { FormEntryValueComponent } from '../../shared/form-entry-value.component
 
           <div class="field">
             <label>Profile gallery images</label>
-            <p class="field-hint">Extra photos shown on the model profile page — separate from digitals.</p>
+            <p class="field-hint">Shown on /{{ profileSlug }} in this order, left to right.</p>
             <app-file-upload
               #mediaUpload
               name="gallery"
@@ -343,6 +343,7 @@ import { FormEntryValueComponent } from '../../shared/form-entry-value.component
               [multiple]="true"
               label="Upload gallery photos"
               hint="You can select multiple photos at once"
+              reorderHint="Drag to set the order on the model page, or use the arrows."
             />
           </div>
 
@@ -364,6 +365,7 @@ import { FormEntryValueComponent } from '../../shared/form-entry-value.component
               [multiple]="true"
               label="Upload digitals"
               hint="Choose photos from your computer or phone"
+              reorderHint="Drag to set the order on the digitals page, or use the arrows."
             />
           </div>
 
@@ -876,6 +878,11 @@ export class AdminDashboardComponent implements OnInit {
 
   get digitalsSlug(): string {
     return this.editing.name ? digitalsNameSlug(this.editing.name) : '';
+  }
+
+  get profileSlug(): string {
+    if (this.editing.id) return this.editing.id;
+    return this.editing.name ? this.categoriesSvc.slugFromName(this.editing.name) : 'model-name';
   }
 
   setModelType(value: string) {
