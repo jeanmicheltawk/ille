@@ -10,8 +10,12 @@ export function apiOrigin(): string {
   return base.replace(/\/api\/?$/, '');
 }
 
-/** Turn a stored media reference into a browser-loadable URL. */
-export function mediaUrl(path: string | null | undefined): string {
+/**
+ * Turn a stored media reference into a browser-loadable URL.
+ * Pass `width` for images shown small (grid cards, thumbnails): the API resizes
+ * and caches them. Without it, images are capped at 1600px. Ignored for videos/PDFs.
+ */
+export function mediaUrl(path: string | null | undefined, width?: number): string {
   if (!path) return '';
   if (path.startsWith('blob:') || path.startsWith('data:') || path.startsWith('assets/')) {
     return path;
@@ -19,7 +23,10 @@ export function mediaUrl(path: string | null | undefined): string {
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
   if (path.startsWith('/api/media/') || path.startsWith('/uploads/')) {
     const origin = apiOrigin();
-    return origin ? `${origin}${path}` : path;
+    const url = origin ? `${origin}${path}` : path;
+    return width && path.startsWith('/api/media/') && !path.includes('?')
+      ? `${url}?w=${Math.round(width)}`
+      : url;
   }
   return path;
 }

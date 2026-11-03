@@ -58,7 +58,7 @@ interface ProfilePerson {
 
         <div class="profile__image">
           <button type="button" class="image-btn" (click)="openLightbox(0)" aria-label="View cover image">
-            <img [src]="model.coverImage | mediaUrl" [alt]="model.name" />
+            <img [src]="model.coverImage | mediaUrl: 1280" [alt]="model.name" />
           </button>
         </div>
       </div>
@@ -71,7 +71,7 @@ interface ProfilePerson {
           (click)="openLightbox(i + 1)"
           [attr.aria-label]="'View image ' + (i + 2)"
         >
-          <img [src]="src | mediaUrl" [alt]="model.name" />
+          <img [src]="src | mediaUrl: 960" [alt]="model.name" loading="lazy" decoding="async" />
         </button>
       </div>
     </div>

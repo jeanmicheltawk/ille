@@ -31,7 +31,7 @@ import { ModelProfileLinksComponent } from './model-profile-links.component';
             allowfullscreen
             [title]="videoLabel"
           ></iframe>
-          <video *ngIf="embed.kind === 'file'" [src]="embed.src" controls playsinline></video>
+          <video *ngIf="embed.kind === 'file'" [src]="embed.src" controls playsinline preload="metadata"></video>
         </div>
       </div>
     </div>

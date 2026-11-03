@@ -39,7 +39,7 @@ interface StatGroup {
             (click)="openLightbox(i)"
             [attr.aria-label]="'View digital ' + (i + 1)"
           >
-            <img [src]="src | mediaUrl" [alt]="model.name + ' digital'" />
+            <img [src]="src | mediaUrl: 960" [alt]="model.name + ' digital'" loading="lazy" decoding="async" />
           </button>
         </div>
 

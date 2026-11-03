@@ -3,6 +3,7 @@
 
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const multer = require('multer');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
@@ -30,12 +31,17 @@ const {
   collectMediaIds,
   deleteUnreferencedMedia,
 } = require('./media');
+const { sendMedia } = require('./mediaOptimizer');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me-in-production';
 
 app.use(cors());
+// gzip JSON + the Angular bundle (media is already compressed, skip it).
+app.use(compression({
+  filter: (req, res) => !(req.path || '').startsWith('/api/media/') && compression.filter(req, res),
+}));
 app.use(express.json({ limit: '2mb' }));
 
 const memoryStorage = multer.memoryStorage();
@@ -57,21 +63,35 @@ function requireAuth(req, res, next) {
 // ============================================================
 // MEDIA (binary stored in PostgreSQL)
 // ============================================================
-app.get('/api/media/:id', async (req, res) => {
-  const media = await fetchMedia(query, req.params.id);
-  if (!media) return res.status(404).send('Not found');
-  const filename = String(media.filename || req.params.id)
-    .replace(/["\r\n\\]/g, '')
-    .replace(/[^\w.\-]+/g, '_')
-    .slice(0, 120) || req.params.id;
-  const asDownload = req.query.download != null && req.query.download !== '0';
-  res.setHeader('Content-Type', media.mimeType);
-  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-  res.setHeader(
-    'Content-Disposition',
-    `${asDownload ? 'attachment' : 'inline'}; filename="${filename}"`,
-  );
-  res.send(media.data);
+// Images are resized + cached on disk (capped at 1600px WebP; ?w=640 for smaller,
+// ?download=1 / ?original=1 for the raw file). Videos get Range support.
+app.get('/api/media/:id', async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    if (!/^m_[A-Za-z0-9_]+$/.test(id)) return res.status(404).send('Not found');
+    const asDownload = req.query.download != null && req.query.download !== '0';
+    const found = await sendMedia(req, res, {
+      key: `ille:${id}`,
+      getMeta: async () => {
+        const { rows } = await query('SELECT filename, mime_type FROM media_files WHERE id = $1', [id]);
+        return rows[0] ? { mime: rows[0].mime_type, filename: rows[0].filename } : null;
+      },
+      getData: async () => (await fetchMedia(query, id))?.data || null,
+      setHeaders: (response, meta) => {
+        const filename = String(meta.filename || id)
+          .replace(/["\r\n\\]/g, '')
+          .replace(/[^\w.\-]+/g, '_')
+          .slice(0, 120) || id;
+        response.setHeader(
+          'Content-Disposition',
+          `${asDownload ? 'attachment' : 'inline'}; filename="${filename}"`,
+        );
+      },
+    });
+    if (!found) return res.status(404).send('Not found');
+  } catch (err) {
+    next(err);
+  }
 });
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -1250,8 +1270,17 @@ function serializeService(s) {
 // ============================================================
 const frontendDist = path.join(__dirname, '..', 'dist', 'ille-angular', 'browser');
 if (fs.existsSync(frontendDist)) {
-  app.use(express.static(frontendDist));
+  // Hashed bundles (main-XXXX.js) never change -> cache for a year; index.html always revalidates.
+  app.use(express.static(frontendDist, {
+    maxAge: '1y',
+    immutable: true,
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+      else if (!/[.-][A-Z0-9]{8,}\.(js|css)$/.test(filePath)) res.setHeader('Cache-Control', 'public, max-age=604800');
+    },
+  }));
   app.get(/^\/(?!api).*/, (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
     res.sendFile(path.join(frontendDist, 'index.html'));
   });
   console.log('Serving built frontend from', frontendDist);

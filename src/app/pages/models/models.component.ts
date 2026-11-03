@@ -44,7 +44,7 @@ import {
       <div class="grid" *ngIf="!loading">
         <a *ngFor="let m of visible; let i = index" [routerLink]="['/', m.id]"
            class="card rise" [style.animation-delay]="(i * 0.06) + 's'">
-          <div class="card__img" [style.background-image]="'url(' + (m.coverImage | mediaUrl) + ')'">
+          <div class="card__img" [style.background-image]="'url(' + (m.coverImage | mediaUrl: 640) + ')'">
             <span *ngIf="m.outOfTown" class="card__badge">Out of town</span>
             <ng-container *ngIf="cardStatGroups(m) as groups">
               <div class="card__stats" *ngIf="groups.length">
