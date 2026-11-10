@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Input, OnChanges, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { COUNTRY_CODES, DEFAULT_COUNTRY_ISO, PINNED_COUNTRY_CODES, dialCodeFor } from './country-codes';
 import { ServiceFormField } from '../core/models.types';
 import { groupFormFields } from '../core/form-field.util';
 
@@ -68,12 +69,12 @@ import { groupFormFields } from '../core/form-field.util';
 
               <div *ngIf="field.type === 'phone'" class="dyn-form__phone">
                 <select [(ngModel)]="values[field.id + '_code']" [name]="field.id + '_code'" [required]="!!field.required">
-                  <option value="+961">🇱🇧 +961</option>
-                  <option value="+971">🇦🇪 +971</option>
-                  <option value="+966">🇸🇦 +966</option>
-                  <option value="+33">🇫🇷 +33</option>
-                  <option value="+44">🇬🇧 +44</option>
-                  <option value="+1">🇺🇸 +1</option>
+                  <optgroup label="Popular">
+                    <option *ngFor="let c of pinnedCountries" [value]="c.iso">{{ c.flag }} {{ c.dial }} · {{ c.name }}</option>
+                  </optgroup>
+                  <optgroup label="All countries">
+                    <option *ngFor="let c of allCountries" [value]="c.iso">{{ c.flag }} {{ c.dial }} · {{ c.name }}</option>
+                  </optgroup>
                 </select>
                 <input
                   type="tel"
@@ -138,7 +139,8 @@ import { groupFormFields } from '../core/form-field.util';
       font-weight: 200;
       line-height: 1.65;
     }
-    .dyn-form__phone { display: grid; grid-template-columns: 120px 1fr; gap: 10px; }
+    .dyn-form__phone { display: grid; grid-template-columns: 150px 1fr; gap: 10px; }
+    .dyn-form__phone select { min-width: 0; text-overflow: ellipsis; }
     .dyn-form__radios { display: flex; flex-direction: column; gap: 10px; }
     .dyn-form__radio { display: flex; align-items: center; gap: 10px; font-size: 13px; }
     .dyn-form__radio-help { margin: 0 0 8px; font-size: 12px; color: var(--ink-muted); }
@@ -225,6 +227,8 @@ export class DynamicFormComponent implements OnChanges {
   @Input() busy = false;
   @Output() submitted = new EventEmitter<{ values: Record<string, string>; files: Record<string, File> }>();
 
+  readonly pinnedCountries = PINNED_COUNTRY_CODES;
+  readonly allCountries = COUNTRY_CODES;
   values: Record<string, string> = {};
   files: Record<string, File | undefined> = {};
   filePreviews: Record<string, string> = {};
@@ -234,7 +238,7 @@ export class DynamicFormComponent implements OnChanges {
     this.fieldRows = groupFormFields(this.fields || []);
     for (const field of this.fields || []) {
       if (field.type === 'phone' && !this.values[field.id + '_code']) {
-        this.values[field.id + '_code'] = '+961';
+        this.values[field.id + '_code'] = DEFAULT_COUNTRY_ISO;
       }
     }
   }
@@ -261,7 +265,7 @@ export class DynamicFormComponent implements OnChanges {
     const payload: Record<string, string> = { ...this.values };
     for (const field of this.fields || []) {
       if (field.type === 'phone') {
-        payload[field.id] = `${this.values[field.id + '_code'] || ''} ${this.values[field.id] || ''}`.trim();
+        payload[field.id] = `${dialCodeFor(this.values[field.id + '_code'])} ${this.values[field.id] || ''}`.trim();
         delete payload[field.id + '_code'];
       }
     }

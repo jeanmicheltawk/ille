@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { COUNTRY_CODES, DEFAULT_COUNTRY_ISO, PINNED_COUNTRY_CODES, dialCodeFor } from '../../shared/country-codes';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ServicesService } from '../../core/services.service';
 import { ServiceFormField, ServiceItem } from '../../core/models.types';
@@ -56,12 +57,12 @@ import { mediaUrl } from '../../core/media-url.util';
 
                   <div *ngIf="field.type === 'phone'" class="book__phone">
                     <select [(ngModel)]="values[field.id + '_code']" [name]="field.id + '_code'" required>
-                      <option value="+961">🇱🇧 +961</option>
-                      <option value="+971">🇦🇪 +971</option>
-                      <option value="+966">🇸🇦 +966</option>
-                      <option value="+33">🇫🇷 +33</option>
-                      <option value="+44">🇬🇧 +44</option>
-                      <option value="+1">🇺🇸 +1</option>
+                      <optgroup label="Popular">
+                        <option *ngFor="let c of pinnedCountries" [value]="c.iso">{{ c.flag }} {{ c.dial }} · {{ c.name }}</option>
+                      </optgroup>
+                      <optgroup label="All countries">
+                        <option *ngFor="let c of allCountries" [value]="c.iso">{{ c.flag }} {{ c.dial }} · {{ c.name }}</option>
+                      </optgroup>
                     </select>
                     <input
                       type="tel"
@@ -187,7 +188,7 @@ import { mediaUrl } from '../../core/media-url.util';
       display: flex; gap: 12px; align-items: flex-end;
     }
     .book__phone select {
-      width: 110px; flex-shrink: 0;
+      width: 140px; flex-shrink: 0; text-overflow: ellipsis;
       background: transparent;
       border: none;
       border-bottom: 1px solid rgba(255,255,255,0.45);
@@ -243,6 +244,8 @@ export class ServiceBookComponent implements OnInit {
   busy = false;
   done = false;
   error = '';
+  readonly pinnedCountries = PINNED_COUNTRY_CODES;
+  readonly allCountries = COUNTRY_CODES;
   values: Record<string, string> = {};
   fieldRows: ServiceFormField[][] = [];
 
@@ -260,7 +263,7 @@ export class ServiceBookComponent implements OnInit {
       this.fieldRows = this.groupFields(this.service.formFields);
       for (const row of this.fieldRows) {
         for (const f of row) {
-          if (f.type === 'phone') this.values[f.id + '_code'] = '+961';
+          if (f.type === 'phone') this.values[f.id + '_code'] = DEFAULT_COUNTRY_ISO;
         }
       }
     }
@@ -302,7 +305,7 @@ export class ServiceBookComponent implements OnInit {
     const payload: Record<string, string> = { ...this.values };
     for (const field of this.service.formFields || []) {
       if (field.type === 'phone') {
-        payload[field.id] = `${this.values[field.id + '_code'] || ''} ${this.values[field.id] || ''}`.trim();
+        payload[field.id] = `${dialCodeFor(this.values[field.id + '_code'])} ${this.values[field.id] || ''}`.trim();
         delete payload[field.id + '_code'];
       }
     }
