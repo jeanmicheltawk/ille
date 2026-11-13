@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { CategoriesService } from '../../core/categories.service';
 import { ModelCategory } from '../../core/models.types';
-import { categoryNavLink, setModelsBranch } from '../../core/models-branch.util';
+import { categoryNavLink, isStudentsCategory, setModelsBranch } from '../../core/models-branch.util';
 
 @Component({
   selector: 'app-home',
@@ -215,13 +215,20 @@ import { categoryNavLink, setModelsBranch } from '../../core/models-branch.util'
       letter-spacing: 0.22em;
       text-transform: uppercase;
       color: var(--ink-muted);
-      transition: color 0.4s ease, letter-spacing 0.4s ease;
+      transition: color 0.4s ease;
     }
     .cat:hover {
       color: var(--accent);
-      letter-spacing: 0.3em;
     }
-    .cat__label { display: block; }
+    /* Scale the label only — letter-spacing on hover reflows flex and flickers on long names. */
+    .cat__label {
+      display: inline-block;
+      transform-origin: center;
+      transition: transform 0.4s ease;
+    }
+    .cat:hover .cat__label {
+      transform: scaleX(1.04);
+    }
 
     .statement {
       padding: 120px 0 60px;
@@ -269,12 +276,19 @@ export class HomeComponent implements OnInit {
   constructor(private categoriesSvc: CategoriesService) {}
 
   async ngOnInit() {
-    this.categories = await this.categoriesSvc.listPublished();
+    this.categories = this.sortHomeCategories(await this.categoriesSvc.listPublished());
   }
 
   onCategoryClick(id: string) {
     if (id === 'men' || id === 'women') {
       setModelsBranch(id);
     }
+  }
+
+  /** Keep Students' catalogue after Women / Men / other divisions when present. */
+  private sortHomeCategories(list: ModelCategory[]): ModelCategory[] {
+    const students = list.filter((c) => isStudentsCategory(c.id));
+    const rest = list.filter((c) => !isStudentsCategory(c.id));
+    return [...rest, ...students];
   }
 }

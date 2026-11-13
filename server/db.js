@@ -230,19 +230,29 @@ async function seedAdmin(client) {
 
 async function seedCategories(client) {
   const { rows } = await client.query('SELECT COUNT(*)::int AS c FROM model_categories');
-  if (rows[0].c > 0) return;
-
-  const seedCategories = [
-    ['women', 'Women', 0, true],
-    ['men', 'Men', 2, true],
-  ];
-  for (const [id, name, sortOrder, published] of seedCategories) {
-    await client.query(
-      'INSERT INTO model_categories (id, name, "sortOrder", published) VALUES ($1, $2, $3, $4)',
-      [id, name, sortOrder, published],
-    );
+  if (rows[0].c === 0) {
+    const seedCategories = [
+      ['women', 'Women', 0, true],
+      ['men', 'Men', 2, true],
+      ['students', "Students' catalogue", 50, true],
+    ];
+    for (const [id, name, sortOrder, published] of seedCategories) {
+      await client.query(
+        'INSERT INTO model_categories (id, name, "sortOrder", published) VALUES ($1, $2, $3, $4)',
+        [id, name, sortOrder, published],
+      );
+    }
+    console.log(`Seeded ${seedCategories.length} model categories.`);
+    return;
   }
-  console.log(`Seeded ${seedCategories.length} model categories.`);
+
+  // Existing DBs: ensure the reserved Students' catalogue row exists.
+  await client.query(
+    `INSERT INTO model_categories (id, name, "sortOrder", published)
+     VALUES ('students', $1, 50, TRUE)
+     ON CONFLICT (id) DO NOTHING`,
+    ["Students' catalogue"],
+  );
 }
 
 async function seedServices(client) {

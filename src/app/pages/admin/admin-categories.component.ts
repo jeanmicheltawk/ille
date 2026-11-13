@@ -2,6 +2,12 @@ import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { CategoriesService } from '../../core/categories.service';
+import {
+  isBranchCategory,
+  isStudentsCategory,
+  STUDENTS_CATEGORY_ID,
+  STUDENTS_CATEGORY_NAME,
+} from '../../core/models-branch.util';
 import { ModelCategory } from '../../core/models.types';
 import { ToastService } from '../../shared/toast.service';
 
@@ -14,8 +20,9 @@ import { ToastService } from '../../shared/toast.service';
       <div class="intro">
         <h2>Model categories</h2>
         <p>
-          Manage divisions (Women, Men) and sub-categories (New Faces, etc.) shown on the
-          <strong>/models</strong> page. Each model belongs to one division and optionally one sub-category.
+          Manage divisions (Women, Men), the static <strong>Students' catalogue</strong>, and other
+          sub-categories shown on the site. Assign models to Students' catalogue from the Models tab;
+          use <strong>Visible on website</strong> below to show or hide that home-page link.
         </p>
       </div>
 
@@ -31,6 +38,7 @@ import { ToastService } from '../../shared/toast.service';
                (click)="edit(c)">
             <div class="list-item__top">
               <span class="list-item__slug">/{{ c.id }}</span>
+              <span class="list-item__badge" *ngIf="isStudentsCategory(c.id)">Home</span>
               <span class="list-item__badge list-item__badge--hide" *ngIf="!c.published">Hidden</span>
             </div>
             <strong>{{ c.name }}</strong>
@@ -56,7 +64,14 @@ import { ToastService } from '../../shared/toast.service';
             </div>
 
             <div class="field" [class.field--invalid]="fieldErrors['slug']">
-              <label>URL slug <span class="tip">Used in links: /models/men/{{ editing.id || 'slug' }} or /models/women/{{ editing.id || 'slug' }}</span></label>
+              <label>URL slug
+                <span class="tip" *ngIf="isStudentsCategory(editing.id); else slugTipDefault">
+                  Fixed link: /models/students
+                </span>
+                <ng-template #slugTipDefault>
+                  <span class="tip">Used in links: /models/men/{{ editing.id || 'slug' }} or /models/women/{{ editing.id || 'slug' }}</span>
+                </ng-template>
+              </label>
               <input name="slug" [(ngModel)]="editing.id" required placeholder="e.g. women"
                      [readonly]="!isNew && !!editing.id" (ngModelChange)="slugTouched = true" />
               <p class="field-error" *ngIf="fieldErrors['slug']">{{ fieldErrors['slug'] }}</p>
@@ -70,8 +85,10 @@ import { ToastService } from '../../shared/toast.service';
             <label class="toggle">
               <input type="checkbox" name="pub" [(ngModel)]="editing.published" />
               <span>
-                <strong>Visible on website</strong>
-                <em>Turn off to hide from navigation without deleting</em>
+                <strong>{{ isStudentsCategory(editing.id) ? "Show Students' catalogue on home" : 'Visible on website' }}</strong>
+                <em>{{ isStudentsCategory(editing.id)
+                  ? 'Turn off to hide the Students’ catalogue link on the home page without removing student models'
+                  : 'Turn off to hide from navigation without deleting' }}</em>
               </span>
             </label>
 
@@ -79,7 +96,9 @@ import { ToastService } from '../../shared/toast.service';
               <button class="btn" type="submit">
                 {{ isNew ? 'Create category' : 'Save changes' }}
               </button>
-              <button class="btn btn--ghost" type="button" *ngIf="editing.id && !isNew" (click)="remove()">Delete</button>
+              <button class="btn btn--ghost" type="button"
+                      *ngIf="editing.id && !isNew && !isReserved(editing.id)"
+                      (click)="remove()">Delete</button>
             </div>
           </form>
         </div>
@@ -249,6 +268,7 @@ export class AdminCategoriesComponent implements OnInit {
   slugTouched = false;
   actionMessage = '';
   actionKind: 'success' | 'error' = 'success';
+  readonly isStudentsCategory = isStudentsCategory;
 
   constructor(private categoriesSvc: CategoriesService) {}
 
@@ -262,8 +282,25 @@ export class AdminCategoriesComponent implements OnInit {
     return this.categoriesSvc.blank();
   }
 
+  isReserved(id: string): boolean {
+    return isBranchCategory(id) || isStudentsCategory(id);
+  }
+
   async refresh() {
     this.categories = await this.categoriesSvc.listAll();
+    if (!this.categories.some((c) => isStudentsCategory(c.id))) {
+      try {
+        await this.categoriesSvc.create({
+          id: STUDENTS_CATEGORY_ID,
+          name: STUDENTS_CATEGORY_NAME,
+          sortOrder: 50,
+          published: true,
+        });
+        this.categories = await this.categoriesSvc.listAll();
+      } catch {
+        // Server migration/seed may already own this; ignore race/duplicate.
+      }
+    }
   }
 
   startNew() {
@@ -323,6 +360,12 @@ export class AdminCategoriesComponent implements OnInit {
       return;
     }
 
+    if (this.isNew && this.isReserved(id)) {
+      this.fieldErrors['slug'] = 'This slug is reserved.';
+      this.error = 'Women, Men, and Students’ catalogue are reserved and cannot be recreated.';
+      return;
+    }
+
     const payload: ModelCategory = { ...this.editing, id };
 
     try {
@@ -347,7 +390,12 @@ export class AdminCategoriesComponent implements OnInit {
   }
 
   async remove() {
-    if (!this.editing.id || !confirm(`Delete category "${this.editing.name}"?`)) return;
+    if (!this.editing.id || this.isReserved(this.editing.id)) {
+      this.error = 'This category is reserved and cannot be deleted.';
+      this.setActionMessage(this.error, 'error');
+      return;
+    }
+    if (!confirm(`Delete category "${this.editing.name}"?`)) return;
     this.error = '';
     try {
       await this.categoriesSvc.remove(this.editing.id);

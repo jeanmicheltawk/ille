@@ -61,6 +61,11 @@ export function normalizeModelCategory(model: Pick<Model, 'category'>): string {
   return category === 'men' || category === 'women' ? '' : category;
 }
 
+/** Students belong only on /models/students, not on Women/Men main rosters. */
+export function isStudentModel(model: Pick<Model, 'category'>): boolean {
+  return normalizeModelCategory(model) === 'students';
+}
+
 export function normalizeModelBranch(model: Pick<Model, 'branch' | 'category'>): ModelsBranch {
   if (model.branch === 'men' || model.branch === 'women') return model.branch;
   if (model.category === 'men') return 'men';

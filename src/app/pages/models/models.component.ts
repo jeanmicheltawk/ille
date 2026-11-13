@@ -3,12 +3,13 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ModelsService } from '../../core/models.service';
 import { CategoriesService } from '../../core/categories.service';
-import { modelStats, ModelStat, normalizeModelCategory } from '../../core/model.util';
+import { isStudentModel, modelStats, ModelStat, normalizeModelCategory } from '../../core/model.util';
 import { Model, ModelCategory, ModelsBranch } from '../../core/models.types';
 import { MediaUrlPipe } from '../../shared/media-url.pipe';
 import {
   isBranchCategory,
   isBranchTab,
+  isStudentsCategory,
   modelsCategoryLink,
   modelsDivisionLink,
   setModelsBranch,
@@ -292,10 +293,10 @@ export class ModelsComponent implements OnInit {
   get tabCategories(): ModelCategory[] {
     const base =
       this.branch === 'men'
-        ? this.categories.filter((c) => c.id !== 'women')
+        ? this.categories.filter((c) => c.id !== 'women' && !isStudentsCategory(c.id))
         : this.branch === 'women'
-          ? this.categories.filter((c) => c.id !== 'men')
-          : this.categories;
+          ? this.categories.filter((c) => c.id !== 'men' && !isStudentsCategory(c.id))
+          : this.categories.filter((c) => !isStudentsCategory(c.id));
 
     return base.filter(
       (c) => isBranchCategory(c.id) || this.categoriesWithModels.has(c.id),
@@ -328,7 +329,14 @@ export class ModelsComponent implements OnInit {
     if (!this.branch) return;
 
     this.loading = true;
-    const branchModels = await this.models.list({ branch: this.branch });
+    if (isStudentsCategory(this.subCategory)) {
+      this.loading = false;
+      await this.router.navigate(['/models', 'students'], { replaceUrl: true });
+      return;
+    }
+
+    const branchModels = (await this.models.list({ branch: this.branch }))
+      .filter((m) => !isStudentModel(m));
 
     this.categoriesWithModels = new Set(
       branchModels.map((m) => normalizeModelCategory(m)).filter(Boolean),

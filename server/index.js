@@ -330,6 +330,9 @@ app.get('/api/models', async (req, res) => {
       params.push(category);
       sql += ` AND category = $${params.length}`;
     }
+  } else if (branch === 'men' || branch === 'women') {
+    // Women/Men grids never include Students' catalogue models.
+    sql += " AND category IS DISTINCT FROM 'students'";
   }
   sql += ' ORDER BY name';
   const { rows } = await query(sql, params);
@@ -474,6 +477,9 @@ app.put('/api/admin/categories/:id', requireAuth, async (req, res) => {
 
 app.delete('/api/admin/categories/:id', requireAuth, async (req, res) => {
   const id = req.params.id;
+  if (id === 'students' || id === 'women' || id === 'men') {
+    return res.status(400).json({ error: 'This category is reserved and cannot be deleted' });
+  }
   const { rows } = await query('SELECT COUNT(*)::int AS c FROM models WHERE category = $1', [id]);
   const inUse = rows[0].c;
   if (inUse > 0) {

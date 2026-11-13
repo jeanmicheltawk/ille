@@ -9,7 +9,7 @@ import { AuthService } from '../../core/auth.service';
 import { ApiService } from '../../core/api.service';
 import { Booking, Model, ModelApplication, ModelCategory } from '../../core/models.types';
 import { digitalsNameSlug } from '../../core/model.util';
-import { isBranchCategory, subCategories } from '../../core/models-branch.util';
+import { isBranchCategory, modelCategoryOptions } from '../../core/models-branch.util';
 import {
   applicationToRecord,
   bookingToRecord,
@@ -263,7 +263,9 @@ import { FormEntryValueComponent } from '../../shared/form-entry-value.component
               <label>Category</label>
               <select name="category" [(ngModel)]="editing.category">
                 <option value="">Main roster</option>
-                <option *ngFor="let c of modelCategories" [value]="c.id">{{ c.name }}</option>
+                <option *ngFor="let c of modelCategories" [value]="c.id">
+                  {{ c.name }}{{ c.id === 'students' ? ' (home page)' : '' }}
+                </option>
               </select>
               <p class="field-error" *ngIf="fieldErrors['category']">{{ fieldErrors['category'] }}</p>
             </div>
@@ -820,7 +822,7 @@ export class AdminDashboardComponent implements OnInit {
   }
 
   get modelCategories(): ModelCategory[] {
-    return subCategories(this.categories);
+    return modelCategoryOptions(this.categories);
   }
 
   branchName(branch: string): string {

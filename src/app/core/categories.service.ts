@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { ApiService } from './api.service';
+import { STUDENTS_CATEGORY_ID, STUDENTS_CATEGORY_NAME } from './models-branch.util';
 import { ModelCategory } from './models.types';
 
 @Injectable({ providedIn: 'root' })
@@ -8,6 +9,7 @@ export class CategoriesService {
     { id: 'women', name: 'Women', sortOrder: 0, published: true },
     // { id: 'new-faces', name: 'New Faces', sortOrder: 1, published: true },
     { id: 'men', name: 'Men', sortOrder: 1, published: true },
+    { id: STUDENTS_CATEGORY_ID, name: STUDENTS_CATEGORY_NAME, sortOrder: 50, published: true },
   ];
 
   constructor(private api: ApiService) {}
