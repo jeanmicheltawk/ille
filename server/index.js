@@ -382,6 +382,15 @@ app.post('/api/admin/models', requireAuth, async (req, res) => {
   try {
     const m = req.body;
     const s = serializeModel(m);
+    if (!s.id) {
+      return res.status(400).json({ error: 'Model name is required.' });
+    }
+    const { rows: existing } = await query('SELECT id FROM models WHERE id = $1', [s.id]);
+    if (existing.length) {
+      return res.status(409).json({
+        error: 'A model with this name already exists. Please choose a different name.',
+      });
+    }
     await query(`
       INSERT INTO models (id, name, branch, category, height, bust, waist, hips, "shoeSize",
         hair, eyes, city, "outOfTown", instagram, "coverImage", gallery, digitals,
@@ -399,7 +408,12 @@ app.post('/api/admin/models', requireAuth, async (req, res) => {
     }
   } catch (err) {
     console.error('POST /api/admin/models failed:', err);
-    res.status(500).json({ error: err.message || 'Failed to save model' });
+    if (err?.code === '23505') {
+      return res.status(409).json({
+        error: 'A model with this name already exists. Please choose a different name.',
+      });
+    }
+    res.status(500).json({ error: friendlyDbError(err, 'Failed to save model') });
   }
 });
 
@@ -429,7 +443,12 @@ app.put('/api/admin/models/:id', requireAuth, async (req, res) => {
     reclaimMedia(oldMediaIds);
   } catch (err) {
     console.error('PUT /api/admin/models failed:', err);
-    res.status(500).json({ error: err.message || 'Failed to save model' });
+    if (err?.code === '23505') {
+      return res.status(409).json({
+        error: 'A model with this name already exists. Please choose a different name.',
+      });
+    }
+    res.status(500).json({ error: friendlyDbError(err, 'Failed to save model') });
   }
 });
 
@@ -488,6 +507,29 @@ app.delete('/api/admin/categories/:id', requireAuth, async (req, res) => {
   await query('DELETE FROM model_categories WHERE id = $1', [id]);
   res.json({ ok: true });
 });
+
+/** Turn raw Postgres / driver errors into admin-readable copy. */
+function friendlyDbError(err, fallback = 'Something went wrong. Please try again.') {
+  const code = err?.code;
+  const msg = String(err?.message || '');
+  if (code === '23505' || /duplicate key/i.test(msg) || /unique constraint/i.test(msg)) {
+    if (/models_pkey/i.test(msg) || /models.*id/i.test(msg)) {
+      return 'A model with this name already exists. Please choose a different name.';
+    }
+    return 'This value is already in use. Please choose a different one.';
+  }
+  if (code === '23503') {
+    return 'This record is linked to other data and cannot be changed that way.';
+  }
+  if (code === '23502') {
+    return 'A required field is missing.';
+  }
+  // Never leak raw SQL / constraint names to the admin UI when we have a fallback.
+  if (/violates|constraint|relation |syntax error/i.test(msg)) {
+    return fallback;
+  }
+  return msg.trim() || fallback;
+}
 
 function serializeCategory(c) {
   return {

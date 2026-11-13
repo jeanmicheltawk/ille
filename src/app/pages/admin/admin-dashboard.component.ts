@@ -966,9 +966,28 @@ export class AdminDashboardComponent implements OnInit {
       if (isEdit) {
         await this.modelsSvc.update(this.editing);
       } else {
-        this.editing.id = this.categoriesSvc.slugFromName(this.editing.name);
+        const id = this.categoriesSvc.slugFromName(this.editing.name);
+        if (!id) {
+          this.fieldErrors['name'] = 'Please enter a valid name.';
+          this.formError = 'Please enter a valid name.';
+          this.setActionMessage(this.formError, 'error');
+          return;
+        }
+        if (this.models.some((m) => m.id === id)) {
+          this.fieldErrors['name'] = 'A model with this name already exists.';
+          this.formError = 'A model with this name already exists. Please choose a different name.';
+          this.setActionMessage(this.formError, 'error');
+          return;
+        }
+        this.editing.id = id;
         if (!this.editing.gallery?.length) this.editing.gallery = [];
-        await this.modelsSvc.create(this.editing, { notifySubscribers: this.notifySubscribers });
+        try {
+          await this.modelsSvc.create(this.editing, { notifySubscribers: this.notifySubscribers });
+        } catch (createErr) {
+          // Keep the modal in "add" mode if create failed after assigning an id.
+          this.editing.id = '';
+          throw createErr;
+        }
       }
       this.closeModelModal();
       await this.refresh();
@@ -979,9 +998,11 @@ export class AdminDashboardComponent implements OnInit {
       this.setActionMessage(base + note);
     } catch (err: unknown) {
       const detail = this.getErrorMessage(err);
-      const base = isEdit ? 'Could not save model changes.' : 'Could not add model.';
-      this.formError = `${base} ${detail}`;
-      this.setActionMessage(`${base} ${detail}`, 'error');
+      this.formError = detail;
+      this.setActionMessage(detail, 'error');
+      if (/already exists/i.test(detail)) {
+        this.fieldErrors['name'] = 'A model with this name already exists.';
+      }
     }
   }
 
@@ -1149,18 +1170,42 @@ export class AdminDashboardComponent implements OnInit {
   }
 
   private getErrorMessage(err: unknown): string {
+    let raw = '';
     if (err instanceof HttpErrorResponse) {
       const payload = err.error;
-      if (typeof payload === 'string' && payload.trim()) return payload.trim();
-      if (payload && typeof payload === 'object') {
+      if (typeof payload === 'string' && payload.trim()) raw = payload.trim();
+      else if (payload && typeof payload === 'object') {
         const msg = (payload as { error?: unknown; message?: unknown }).error
           ?? (payload as { error?: unknown; message?: unknown }).message;
-        if (typeof msg === 'string' && msg.trim()) return msg.trim();
+        if (typeof msg === 'string' && msg.trim()) raw = msg.trim();
       }
-      if (typeof err.message === 'string' && err.message.trim()) return err.message.trim();
+      if (!raw && typeof err.message === 'string' && err.message.trim()) raw = err.message.trim();
+    } else if (err instanceof Error && err.message.trim()) {
+      raw = err.message.trim();
     }
-    if (err instanceof Error && err.message.trim()) return err.message.trim();
-    return 'Please try again.';
+
+    return this.friendlyAdminError(raw) || 'Something went wrong. Please try again.';
+  }
+
+  /** Map technical / DB errors to copy the admin can act on. */
+  private friendlyAdminError(message: string): string {
+    const msg = (message || '').trim();
+    if (!msg) return '';
+    if (
+      /duplicate key/i.test(msg)
+      || /unique constraint/i.test(msg)
+      || /models_pkey/i.test(msg)
+      || /already exists/i.test(msg)
+    ) {
+      return 'A model with this name already exists. Please choose a different name.';
+    }
+    if (/violates foreign key/i.test(msg)) {
+      return 'This record is linked to other data and cannot be changed that way.';
+    }
+    if (/not null/i.test(msg) && /violates/i.test(msg)) {
+      return 'A required field is missing.';
+    }
+    return msg;
   }
 
 }
