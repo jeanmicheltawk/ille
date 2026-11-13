@@ -2,8 +2,14 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { CategoriesService } from '../../core/categories.service';
+import { ModelsService } from '../../core/models.service';
 import { ModelCategory } from '../../core/models.types';
-import { categoryNavLink, isStudentsCategory, setModelsBranch } from '../../core/models-branch.util';
+import {
+  categoryNavLink,
+  isStudentsCategory,
+  setModelsBranch,
+  STUDENTS_CATEGORY_ID,
+} from '../../core/models-branch.util';
 
 @Component({
   selector: 'app-home',
@@ -273,10 +279,17 @@ export class HomeComponent implements OnInit {
   categories: ModelCategory[] = [];
   readonly categoryNavLink = categoryNavLink;
 
-  constructor(private categoriesSvc: CategoriesService) {}
+  constructor(
+    private categoriesSvc: CategoriesService,
+    private modelsSvc: ModelsService,
+  ) {}
 
   async ngOnInit() {
-    this.categories = this.sortHomeCategories(await this.categoriesSvc.listPublished());
+    const [published, students] = await Promise.all([
+      this.categoriesSvc.listPublished(),
+      this.modelsSvc.list({ category: STUDENTS_CATEGORY_ID }),
+    ]);
+    this.categories = this.sortHomeCategories(published, students.length > 0);
   }
 
   onCategoryClick(id: string) {
@@ -285,10 +298,14 @@ export class HomeComponent implements OnInit {
     }
   }
 
-  /** Keep Students' catalogue after Women / Men / other divisions when present. */
-  private sortHomeCategories(list: ModelCategory[]): ModelCategory[] {
-    const students = list.filter((c) => isStudentsCategory(c.id));
+  /**
+   * Keep Students' catalogue after other divisions, but only when it is
+   * published and has at least one student profile.
+   */
+  private sortHomeCategories(list: ModelCategory[], hasStudents: boolean): ModelCategory[] {
     const rest = list.filter((c) => !isStudentsCategory(c.id));
+    if (!hasStudents) return rest;
+    const students = list.filter((c) => isStudentsCategory(c.id));
     return [...rest, ...students];
   }
 }
