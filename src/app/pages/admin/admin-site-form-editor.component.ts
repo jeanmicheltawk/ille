@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { ServiceFormField, SiteFormConfig, SiteFormId } from '../../core/models.types';
 import { SiteFormsService } from '../../core/site-forms.service';
 import { ToastService } from '../../shared/toast.service';
+import { dateTimePair, normalizeFormFields } from '../../core/form-field.util';
 
 interface FieldTypeOption {
   value: ServiceFormField['type'];
@@ -77,7 +78,7 @@ interface QuickField {
 
         <div class="add-row">
           <select [(ngModel)]="newFieldType" name="newType">
-            <option *ngFor="let t of availableTypes" [value]="t.value">{{ t.label }} — {{ t.hint }}</option>
+            <option *ngFor="let t of addTypes" [value]="t.value">{{ t.label }} — {{ t.hint }}</option>
           </select>
           <button type="button" class="btn btn--ghost btn--sm" (click)="addField()">+ Add custom field</button>
         </div>
@@ -123,10 +124,13 @@ interface QuickField {
               <textarea rows="3" [(ngModel)]="f.helpText" [name]="'help' + f.id"></textarea>
             </div>
 
-            <label class="check" *ngIf="f.type !== 'info'">
+            <label class="check" *ngIf="f.type !== 'info' && f.type !== 'date' && f.type !== 'time'">
               <input type="checkbox" [(ngModel)]="f.required" [name]="'req' + f.id" />
               Required (visitor must fill this in)
             </label>
+            <p class="check" *ngIf="f.type === 'date' || f.type === 'time'">
+              Date and time questions are always required.
+            </p>
 
             <label class="check" *ngIf="f.type !== 'info'">
               <input type="checkbox" [checked]="f.width === 'half'" (change)="toggleHalf(f, i)" [name]="'half' + f.id" />
@@ -380,7 +384,6 @@ export class AdminSiteFormEditorComponent implements OnInit {
     { value: 'radio', label: 'Choices', hint: 'pick one, shown as options' },
     { value: 'date', label: 'Date', hint: 'calendar picker' },
     { value: 'time', label: 'Time', hint: 'time picker' },
-    { value: 'datetime', label: 'Date & time', hint: 'calendar + time' },
     { value: 'file', label: 'Photo upload', hint: 'image from phone/computer' },
     { value: 'info', label: 'Info paragraph', hint: 'text only, no answer' },
   ];
@@ -419,11 +422,12 @@ export class AdminSiteFormEditorComponent implements OnInit {
             options: ['Editorial', 'Campaign', 'Runway / Show', 'E-commerce', 'Lookbook', 'Event / Appearance'],
           },
           { type: 'text', label: 'Location' },
-          { type: 'text', label: 'Dates', placeholder: 'e.g. 12–14 July' },
+          { type: 'datetime', label: 'Date & time' },
           { type: 'textarea', label: 'Details' },
         ];
     if (this.boundConfig) {
       this.config = this.boundConfig as SiteFormConfig;
+      this.normalizeConfig();
       this.rulesText = (this.config.rules || []).join('\n');
       return;
     }
@@ -452,9 +456,34 @@ export class AdminSiteFormEditorComponent implements OnInit {
     return this.allowFile ? this.allTypes : this.allTypes.filter((t) => t.value !== 'file');
   }
 
+  /** "Date & time" is only offered when adding: it inserts two required fields (Date + Time). */
+  get addTypes(): FieldTypeOption[] {
+    const types = this.availableTypes;
+    const at = types.findIndex((t) => t.value === 'time') + 1;
+    return [
+      ...types.slice(0, at),
+      { value: 'datetime', label: 'Date & time (2 fields)', hint: 'adds a Date + a Time question' },
+      ...types.slice(at),
+    ];
+  }
+
+  /** Split any stored combined date-time question into Date + Time. */
+  private normalizeConfig() {
+    if (this.config?.formFields) this.config.formFields = normalizeFormFields(this.config.formFields);
+  }
+
+  private addDateTimePair(label: string) {
+    const baseId = this.forms.blankField().id;
+    const pair = dateTimePair(baseId, label, this.fields.length);
+    this.config.formFields = [...this.fields, ...pair];
+    this.expandedId = pair[0].id;
+    this.message = '';
+  }
+
   async load() {
     if (!this.formId) return;
     this.config = await this.forms.get(this.formId);
+    this.normalizeConfig();
     this.rulesText = (this.config.rules || []).join('\n');
   }
 
@@ -480,6 +509,7 @@ export class AdminSiteFormEditorComponent implements OnInit {
 
   onTypeChange(f: ServiceFormField) {
     if (f.type === 'info') f.required = false;
+    if (f.type === 'date' || f.type === 'time') f.required = true;
     if (f.type === 'file') {
       f.required = true;
       f.width = f.width || 'half';
@@ -505,6 +535,7 @@ export class AdminSiteFormEditorComponent implements OnInit {
   }
 
   addQuick(q: QuickField) {
+    if (q.type === 'datetime') return this.addDateTimePair(q.label);
     const field = this.forms.blankField(this.fields.length);
     field.type = q.type;
     field.label = q.label;
@@ -520,6 +551,7 @@ export class AdminSiteFormEditorComponent implements OnInit {
   }
 
   addField() {
+    if (this.newFieldType === 'datetime') return this.addDateTimePair('Date & time');
     const field = this.forms.blankField(this.fields.length);
     field.type = this.newFieldType;
     field.label = this.fieldLabel(this.newFieldType);

@@ -23,6 +23,7 @@ const {
   bookingFromRow,
 } = require('./db');
 const email = require('./email');
+const { normalizeFormFields, combinedBookingDates } = require('./formFields');
 const {
   normalizeMediaRef,
   normalizeMediaRefList,
@@ -641,7 +642,7 @@ app.put('/api/admin/forms/:id', requireAuth, async (req, res) => {
   }
   const body = req.body || {};
   const rules = Array.isArray(body.rules) ? body.rules : [];
-  const formFields = Array.isArray(body.formFields) ? body.formFields : [];
+  const formFields = normalizeFormFields(body.formFields);
   const submitLabel = (body.submitLabel || 'Submit').toString().trim() || 'Submit';
   await query(
     `INSERT INTO site_forms (id, rules, "formFields", "submitLabel", "updatedAt")
@@ -755,7 +756,7 @@ app.post('/api/bookings', async (req, res) => {
       clientEmail,
       data.phone || null,
       data.jobType || null,
-      data.dates || null,
+      combinedBookingDates(data),
       data.location || null,
       data.budget || null,
       data.message || null,
@@ -903,7 +904,7 @@ function serializeCustomForm(body, fallbackId) {
   const id = normalizeFormSlug(body?.id || fallbackId);
   const title = (body?.title || '').toString().trim();
   const rules = Array.isArray(body?.rules) ? body.rules : [];
-  const formFields = Array.isArray(body?.formFields) ? body.formFields : [];
+  const formFields = normalizeFormFields(body?.formFields);
   const submitLabel = (body?.submitLabel || 'Submit').toString().trim() || 'Submit';
   return {
     id,
@@ -1309,7 +1310,7 @@ function serializeService(s) {
     formEnabled,
     formTitle: s.formTitle ?? null,
     backgroundImage: normalizeMediaRef(s.backgroundImage),
-    formFields: jsonb(Array.isArray(s.formFields) ? s.formFields : [], []),
+    formFields: jsonb(normalizeFormFields(s.formFields), []),
   };
 }
 

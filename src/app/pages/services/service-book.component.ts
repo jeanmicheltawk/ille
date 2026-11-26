@@ -6,6 +6,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { ServicesService } from '../../core/services.service';
 import { ServiceFormField, ServiceItem } from '../../core/models.types';
 import { mediaUrl } from '../../core/media-url.util';
+import { normalizeFormFields } from '../../core/form-field.util';
 
 @Component({
   selector: 'app-service-book',
@@ -96,7 +97,6 @@ import { mediaUrl } from '../../core/media-url.util';
 
                   <input *ngIf="field.type === 'date'" type="date" [name]="field.id" [(ngModel)]="values[field.id]" required />
                   <input *ngIf="field.type === 'time'" type="time" [name]="field.id" [(ngModel)]="values[field.id]" required />
-                  <input *ngIf="field.type === 'datetime'" type="datetime-local" [name]="field.id" [(ngModel)]="values[field.id]" required />
                 </div>
               </ng-container>
             </div>
@@ -260,6 +260,8 @@ export class ServiceBookComponent implements OnInit {
     const id = this.route.snapshot.paramMap.get('id')!;
     this.service = await this.services.get(id);
     if (this.service?.formFields) {
+      // Split any combined date-time question into required Date + Time fields.
+      this.service.formFields = normalizeFormFields(this.service.formFields);
       this.fieldRows = this.groupFields(this.service.formFields);
       for (const row of this.fieldRows) {
         for (const f of row) {

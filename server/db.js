@@ -6,6 +6,7 @@ require('dotenv').config({ path: path.join(__dirname, '.env') });
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const { normalizeMediaRef, normalizeMediaRefList, migrateRefToDb, migrateRefListToDb } = require('./media');
+const { normalizeFormFields } = require('./formFields');
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@ille.co';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'illeadmin';
@@ -102,10 +103,7 @@ function serviceFromRow(row) {
     ...row,
     published: !!row.published,
     formEnabled: !!row.formEnabled,
-    formFields: (() => {
-      const parsed = parseJson(row.formFields, []);
-      return Array.isArray(parsed) ? parsed : [];
-    })(),
+    formFields: normalizeFormFields(parseJson(row.formFields, [])),
     backgroundImage: normalizeMediaRef(row.backgroundImage),
   };
 }
@@ -154,10 +152,7 @@ function siteFormFromRow(row) {
     id: row.id,
     rules: parseJson(row.rules, []),
     submitLabel: row.submitLabel || 'Submit',
-    formFields: (() => {
-      const parsed = parseJson(row.formFields, []);
-      return Array.isArray(parsed) ? parsed : [];
-    })(),
+    formFields: normalizeFormFields(parseJson(row.formFields, [])),
   };
 }
 
@@ -172,7 +167,7 @@ function customFormFromRow(row) {
     sortOrder: row.sortOrder ?? 0,
     rules: parseJson(row.rules, []),
     submitLabel: row.submitLabel || 'Submit',
-    formFields: Array.isArray(parsedFields) ? parsedFields : [],
+    formFields: normalizeFormFields(parsedFields),
   };
 }
 
@@ -311,12 +306,13 @@ const DEFAULT_SITE_FORMS = {
         options: ['Editorial', 'Campaign', 'Runway / Show', 'E-commerce', 'Lookbook', 'Event / Appearance'],
       },
       { id: 'location', type: 'text', label: 'Location', width: 'half', rowGroup: 'row3', sortOrder: 5, required: true },
-      { id: 'dates', type: 'text', label: 'Dates', placeholder: 'e.g. 12–14 July', width: 'half', rowGroup: 'row4', sortOrder: 6, required: true },
-      { id: 'budget', type: 'text', label: 'Budget', placeholder: 'Optional', width: 'half', rowGroup: 'row4', sortOrder: 7, required: false },
+      { id: 'bookingDate', type: 'date', label: 'Date', width: 'half', rowGroup: 'row4', sortOrder: 6, required: true },
+      { id: 'bookingTime', type: 'time', label: 'Time', width: 'half', rowGroup: 'row4', sortOrder: 7, required: true },
+      { id: 'budget', type: 'text', label: 'Budget', placeholder: 'Optional', width: 'full', sortOrder: 8, required: false },
       {
         id: 'message', type: 'textarea', label: 'Details',
         placeholder: "Tell us about the project, usage, and which models you're interested in.",
-        width: 'full', sortOrder: 8, required: true,
+        width: 'full', sortOrder: 9, required: true,
       },
     ],
   },
