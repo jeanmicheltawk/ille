@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { COUNTRY_CODES, DEFAULT_COUNTRY_ISO, PINNED_COUNTRY_CODES, dialCodeFor } from './country-codes';
 import { ServiceFormField } from '../core/models.types';
-import { groupFormFields } from '../core/form-field.util';
+import { groupFormFields, normalizeFormFields } from '../core/form-field.util';
 
 @Component({
   selector: 'app-dynamic-form',
@@ -107,9 +107,8 @@ import { groupFormFields } from '../core/form-field.util';
                 </label>
               </div>
 
-              <input *ngIf="field.type === 'date'" type="date" [name]="field.id" [(ngModel)]="values[field.id]" [required]="!!field.required" />
-              <input *ngIf="field.type === 'time'" type="time" [name]="field.id" [(ngModel)]="values[field.id]" [required]="!!field.required" />
-              <input *ngIf="field.type === 'datetime'" type="datetime-local" [name]="field.id" [(ngModel)]="values[field.id]" [required]="!!field.required" />
+              <input *ngIf="field.type === 'date'" type="date" [name]="field.id" [(ngModel)]="values[field.id]" required />
+              <input *ngIf="field.type === 'time'" type="time" [name]="field.id" [(ngModel)]="values[field.id]" required />
             </div>
           </ng-container>
         </div>
@@ -235,8 +234,10 @@ export class DynamicFormComponent implements OnChanges {
   fieldRows: ServiceFormField[][] = [];
 
   ngOnChanges() {
-    this.fieldRows = groupFormFields(this.fields || []);
-    for (const field of this.fields || []) {
+    // Split any combined date-time question into required Date + Time fields.
+    const fields = normalizeFormFields(this.fields);
+    this.fieldRows = groupFormFields(fields);
+    for (const field of fields) {
       if (field.type === 'phone' && !this.values[field.id + '_code']) {
         this.values[field.id + '_code'] = DEFAULT_COUNTRY_ISO;
       }

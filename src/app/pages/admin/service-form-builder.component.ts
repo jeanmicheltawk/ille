@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ServiceFormField, ServiceItem } from '../../core/models.types';
 import { ServicesService } from '../../core/services.service';
 import { mediaUrl } from '../../core/media-url.util';
+import { dateTimePair, normalizeFormFields } from '../../core/form-field.util';
 import { FileUploadComponent } from '../../shared/file-upload.component';
 
 interface FieldTypeOption {
@@ -75,7 +76,7 @@ interface QuickField {
 
           <div class="add-row">
             <select [(ngModel)]="newFieldType" name="newType">
-              <option *ngFor="let t of fieldTypes" [value]="t.value">{{ t.label }}</option>
+              <option *ngFor="let t of addFieldTypes" [value]="t.value">{{ t.label }}</option>
             </select>
             <button type="button" class="btn btn--ghost btn--sm" (click)="addField()">+ Add question</button>
           </div>
@@ -325,8 +326,14 @@ export class ServiceFormBuilderComponent {
     { value: 'radio', label: 'Choices', hint: 'pick one, shown as buttons' },
     { value: 'date', label: 'Date', hint: 'calendar picker' },
     { value: 'time', label: 'Time', hint: 'time picker' },
-    { value: 'datetime', label: 'Date & time', hint: 'calendar + time' },
     { value: 'info', label: 'Info paragraph', hint: 'text only, no answer' },
+  ];
+
+  /** "Date & time" is only offered when adding: it inserts two required fields (Date + Time). */
+  addFieldTypes: FieldTypeOption[] = [
+    ...this.fieldTypes.filter((t) => t.value !== 'info'),
+    { value: 'datetime', label: 'Date & time (2 fields)', hint: 'adds a Date + a Time question' },
+    ...this.fieldTypes.filter((t) => t.value === 'info'),
   ];
 
   quickFields: QuickField[] = [
@@ -346,6 +353,9 @@ export class ServiceFormBuilderComponent {
 
   get fields(): ServiceFormField[] {
     if (!this.service.formFields) this.service.formFields = [];
+    if (this.service.formFields.some((f) => f.type === 'datetime')) {
+      this.service.formFields = normalizeFormFields(this.service.formFields);
+    }
     return this.service.formFields.sort((a, b) => a.sortOrder - b.sortOrder);
   }
 
@@ -411,6 +421,13 @@ export class ServiceFormBuilderComponent {
   }
 
   addField() {
+    if (this.newFieldType === 'datetime') {
+      const baseId = this.services.blankField().id;
+      const pair = dateTimePair(baseId, 'Date & time', this.fields.length);
+      this.service.formFields = [...this.fields, ...pair];
+      this.expandedId = pair[0].id;
+      return;
+    }
     const field = this.services.blankField(this.fields.length);
     field.type = this.newFieldType;
     field.label = this.fieldLabel(this.newFieldType);
